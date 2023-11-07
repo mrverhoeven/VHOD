@@ -55,7 +55,7 @@ library("data.table")
   # probably wasn't a big deal w/ the issues. 
   
 # No issues in these two files  
-  LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US
+  LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source?)
   Link = read_csv("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
 
 #  Convert Monitoring Location Identifier into DOW 
@@ -107,7 +107,7 @@ allMN.do %>%
 allMN.do[ , .N , .(MonitoringLocationIdentifier,ActivityStartDate) ][N>1, .N]
 allMN.do[ , .N , is.na(DOW)]
 
-# So this file still has about 20% missing DOWs 
+# So this file still has about 13% missing DOWs 
 
 
 
@@ -137,7 +137,7 @@ MN.station[!is.na(DOW) , length(unique(LatitudeMeasure)) , .(DOW) ][ ,summary(V1
 #  profiles and joining the data together.
 MN_df <-  MN_df %>% 
   separate(DOW_DATE_AGENCY_PROFID, into = c("DOW", "DATE", "AGENCY", "PROFID"), sep = "_", remove = F)%>%
-  mutate(Sample.Site = floor(as.numeric(PROFID))) %>% #are the profIDs multipart? Why use floor?
+  mutate(Sample.Site = as.integer(PROFID)) %>% #
   mutate(County = substr(DOW, start = 1, stop = 2),
          Township = substr(DOW, start = 3, stop = 6),
          LakeID = substr(DOW, start = 7, stop = 8), #YIKES
@@ -146,11 +146,31 @@ MN_df <-  MN_df %>%
 
 
 #' not sure how it gets used in later steps, but that DOW breakdown ^^ is INCORRECT
+#' check on the monitoring loc id gen
+MN_df[ , "MonitoringLocationIdentifier"  , ] 
+MN_df[ , c("Sample.Site", "PROFID") , ]
+
+allMN.do[OrganizationIdentifier=="MNPCA" , .(MonitoringLocationIdentifier)]
+
+as.integer(MN_df$PROFID)
+any(word(MN_df$PROFID, 2, sep = "\\." )!="0")
+setDT(MN_df)
 
 
-# remove duplicates between WQP & MPCA ------------------------------------
+
+MN_df[word(PROFID, 2, sep = fixed(".")) != "0" , PROFID ,]
+MN_df[word(PROFID, 2, sep = fixed(".")) != "0" , .N ,]
+# about 1/8 of these records ave decimals in those profile IDents. This means that the PROFID variable is going to be dup over many measurements in some cases. 
+
+#can we recover something similar in the WQP data? Like a multipart profile identifier?
+allMN.do[ , ActivityIdentifier , ]
+
+#' So it's obvious to me that there are multipart obs in these data (multi row at one location and date), and here we
+#' have ignored those as we developed the variables that we will use to cross
+#' these two datasets in search of duplicated variables. This means that we won't really 
 
 
+# Remove Dups Between WQP & MPCA ------------------------------------
 
 ### Remove Duplicate Profiles across data sets
 #  The MNPCA reports most of their data to the WQP; therefore, we likely have 
@@ -164,7 +184,7 @@ WQP.Profiles = allMN.do %>% # This identifies all unique profiles in the WQP dat
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
   distinct(Profile)
 
-MN.Duplicate.Profiles = MN_df.MLI%>% # This identifies all unique profiles in the MNPCA data
+MN.Duplicate.Profiles = MN_df%>% # This identifies all unique profiles in the MNPCA data
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)),
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
@@ -172,67 +192,76 @@ MN.Duplicate.Profiles = MN_df.MLI%>% # This identifies all unique profiles in th
   inner_join(WQP.Profiles) # Joins the two together with inner_join, so we only select for the ones that both data sets have
 
 
-MN_DF = MN_df.MLI %>% #Finally remove the duplicate ones from the MNPCA data set 
+MN_df = MN_df %>% #Finally remove the duplicate ones from the MNPCA data set 
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)),
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
   anti_join(MN.Duplicate.Profiles, by = "Profile") #Use anti_join to remove anything that overlaps
 
 # # Summarize the MNPCA Data #434023 obs
-MN_DF %>%
+MN_df %>%
   group_by(MonitoringLocationIdentifier)%>%
   summarise(n = n()) #8,470 Sample Sites
-MN_DF %>%
+MN_df %>%
   group_by(DOW)%>%
   summarise(n = n()) #4,358 Lakes
-MN_DF %>%
+MN_df %>%
   mutate(Year = year(mdy(DATE)))%>%
   group_by(Year)%>%
   summarise(n = n()) #80 Years
-MN_DF %>%
+MN_df %>%
   mutate(Year = year(mdy(DATE)))%>%
   group_by(DOW, Year)%>%
   summarise(n = n()) #22,981 Lake-Years
-MN_DF %>%
+MN_df %>%
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)))%>%
   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
   summarise(n = n()) #40,120 Profiles
 
-# # #Check for overlap
-WQP.MLI = all.MN.DOW %>%
-  distinct(MonitoringLocationIdentifier)
-MN.MLI = MN_DF %>%
-  distinct(MonitoringLocationIdentifier)%>%
-  inner_join(WQP.MLI) #301 Overlap of MonitoringLocationIdentifier
-WQP.DOW = all.MN.DOW %>%
+# # #Check for overlap -- here overlap is okay
+
+#DOW overlap
+WQP.DOW = allMN.do %>%
   distinct(DOW)
-MN.DOW = MN_DF %>%
+MN.DOW = MN_df %>%
   distinct(DOW)%>%
   inner_join(WQP.DOW) #2269 Overlap of Lakes
-WQP.Year = all.MN.DOW %>%
+
+#Years overlap
+WQP.Year = allMN.do %>%
   mutate(Year = year(ymd(ActivityStartDate)))%>%
   distinct(Year)
-MN.Year = MN_DF %>%
+MN.Year = MN_df %>%
   mutate(Year = year(mdy(DATE)))%>%
   distinct(Year)%>%
   inner_join(WQP.Year) #74 Overlap of Years
-WQP.LkYear = all.MN.DOW %>%
+
+#Lk Year overlap
+WQP.LkYear = allMN.do %>%
   mutate(Year = year(ymd(ActivityStartDate)),
          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
   distinct(Lk_Yr)
-MN.LkYear = MN_DF %>%
+MN.LkYear = MN_df %>%
   mutate(Year = year(mdy(DATE)),
          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
   distinct(Lk_Yr)%>%
   inner_join(WQP.LkYear)#4,098 Overlap of Lake Year Combos
 
-WQP.Profile.Check = all.MN.DOW %>%
+#MLI Overlap
+WQP.MLI = allMN.do %>%
+  distinct(MonitoringLocationIdentifier)
+MN.MLI = MN_df %>%
+  distinct(MonitoringLocationIdentifier)%>%
+  inner_join(WQP.MLI) #301 Overlap of MonitoringLocationIdentifier
+
+#profile overlap
+WQP.Profile.Check = allMN.do %>%
   mutate(Year = year(ymd(ActivityStartDate)),
          DOY = yday(ymd(ActivityStartDate)),
          Profile = paste(MonitoringLocationIdentifier, Year, DOY, sep = "/"))%>%
   distinct(Profile)
-MN.Profile.Check = MN_DF %>%
+MN.Profile.Check = MN_df %>%
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)),
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
@@ -240,34 +269,39 @@ MN.Profile.Check = MN_DF %>%
   inner_join(WQP.Profile.Check)#0 Overlap of Profiles
 
 #Clean
-rm(MN_df, WQP.Profiles, MN.Duplicate.Profiles, MN_df.MLI,WQP.Profile.Check,MN.Profile.Check,
+rm(WQP.Profiles, MN.Duplicate.Profiles, WQP.Profile.Check,MN.Profile.Check,
    MN.LkYear, MN.Year, MN.DOW, MN.MLI, WQP.MLI, WQP.DOW, WQP.Year, WQP.LkYear)
 gc()
 
 
 
-# pare down metadata ------------------------------------------------------
+# Add Geom Ratio to Lake Area Data & Merge to our data ------------------------------------------------------
 
-
-#### Filter Metadata
-#WQP
-MN.LakeDepthArea = LakeDepthArea %>% 
-  filter(lake_states == "MN")%>% #We are only looking at MN lakes right now
+LakeDepthArea = LakeDepthArea %>% 
+  # filter(lake_states == "MN")%>% #We are only looking at MN lakes right now, but we can add the GR to the whole dataset
   mutate(lake_area_m2 = lake_waterarea_ha * 10000)%>% #Fang and Stefan 2009 uses the As^0.25:Z with As in square meters
-  mutate(GR = (lake_area_m2^0.25)/lake_maxdepth_m)%>% #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
-  filter(GR < 4) #Lakes with a GR greater than 4 do not stratify
-
-# filter: lakes w/ geometry ratio < 4 -------------------------------------
+  mutate(GR = (lake_area_m2^0.25)/lake_maxdepth_m) #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
+  # filter(GR < 4) #simultaneously with a GR greater than 4 do not stratify. Here we leave GR in the data so that all filtering can happen simultaneously
 
 
-#Connect "everything" together (this is only the WQP dataset)
-MN.WQP = Link %>%
-  select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>%#get rid of extra columns in the data to keep it simpler
-  inner_join(MN.LakeDepthArea, by = "lagoslakeid") %>% #lagoslakeid also contains all the basins for lakes
-  mutate(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% ###Making the metadata files share columns
-  inner_join(MN.allsites, by = "MonitoringLocationIdentifier") %>% #Joining by wqp monitoring location identifier
-  inner_join(all.MN.DOW, by = "MonitoringLocationIdentifier")
+#WQP
+#Connect "lake areas to the metadata from WQP:
 
+
+
+
+Link %>%
+  # select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>%#get rid of extra columns in the data to keep it simpler
+  inner_join(LakeDepthArea, by = "lagoslakeid") %>% #lagoslakeid also contains all the basins for lakes
+  mutate(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
+  inner_join(MN.allsites,., by = "MonitoringLocationIdentifier", 
+             multiple = "first") %>%   #Joining by wqp monitoring location identifier
+
+
+
+
+MN.WQP = 
+  inner_join(allMN.do, by = "MonitoringLocationIdentifier")
 
 # warning: many2many join -------------------------------------------------
 
