@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+#Google
+desktop.ini
+
+#data folder
+data/
