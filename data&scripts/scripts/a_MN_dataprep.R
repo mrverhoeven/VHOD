@@ -55,7 +55,7 @@ library("data.table")
   # probably wasn't a big deal w/ the issues. 
   
 # No issues in these two files  
-  LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source?)
+  LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source? also, doubtful...there are only 17675 entries...)
   Link = read_csv("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
 
 #  Convert Monitoring Location Identifier into DOW 
@@ -84,26 +84,26 @@ allMN.do[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(Monitori
     #   full_join(all.MN.do.DOW)
 
 #Summary of WQP Data  #2217745 obs
-allMN.do %>%
-  group_by(MonitoringLocationIdentifier)%>%
-  summarise(n = n())  
-allMN.do %>%
-  group_by(DOW)%>%
-  summarise(n = n()) 
-allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)))%>%
-  group_by(Year)%>%
-  summarise(n = n())
-allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)))%>%
-  group_by(DOW, Year)%>%
-  summarise(n = n())
-allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)),
-         DOY = yday(ymd(ActivityStartDate)))%>%
-  group_by(MonitoringLocationIdentifier, Year, DOY)%>%
-  summarise(n = n()) 
-
+# allMN.do %>%
+#   group_by(MonitoringLocationIdentifier)%>%
+#   summarise(n = n())  
+# allMN.do %>%
+#   group_by(DOW)%>%
+#   summarise(n = n()) 
+# allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)))%>%
+#   group_by(Year)%>%
+#   summarise(n = n())
+# allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)))%>%
+#   group_by(DOW, Year)%>%
+#   summarise(n = n())
+# allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)),
+#          DOY = yday(ymd(ActivityStartDate)))%>%
+#   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
+#   summarise(n = n()) 
+# 
 allMN.do[ , .N , .(MonitoringLocationIdentifier,ActivityStartDate) ][N>1, .N]
 allMN.do[ , .N , is.na(DOW)]
 
@@ -123,9 +123,9 @@ MN.station = fread("MNstation.csv")#Metadata for all MNPCA sites
 
 MN.station[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]# Here we also need to make DOW from Monitoring Location Identifier
   
-MN.station[ , .N , .(DOW, LatitudeMeasure, LongitudeMeasure) ][N>1 , .N]
-MN.station[!is.na(DOW) , length(unique(LatitudeMeasure)) , .(DOW) ][ ,summary(V1) ,]
-# NOt using these now, buyt might need to...
+MN.station[ , .N , .(DOW, LatitudeMeasure, LongitudeMeasure) ][N>1 , .N] # how many cases where a DOW has > 1 lat & lon?
+MN.station[!is.na(DOW) , length(unique(LatitudeMeasure)) , .(DOW) ][ ,summary(V1) ,] # this suggests there are 134 unique locs in one of the dows in these data
+# Not using these now, but might need to...
 #   select(c(DOW, LatitudeMeasure, LongitudeMeasure))%>%
 #   distinct(DOW, .keep_all = T)
 
@@ -146,6 +146,8 @@ MN_df <-  MN_df %>%
 
 
 #' not sure how it gets used in later steps, but that DOW breakdown ^^ is INCORRECT
+
+
 #' check on the monitoring loc id gen
 MN_df[ , "MonitoringLocationIdentifier"  , ] 
 MN_df[ , c("Sample.Site", "PROFID") , ]
@@ -153,7 +155,7 @@ MN_df[ , c("Sample.Site", "PROFID") , ]
 allMN.do[OrganizationIdentifier=="MNPCA" , .(MonitoringLocationIdentifier)]
 
 as.integer(MN_df$PROFID)
-any(word(MN_df$PROFID, 2, sep = "\\." )!="0")
+any(word(MN_df$PROFID, 2, sep = "\\." )!="0")#are there any non-zero sig digits after the decimal? Yes...
 setDT(MN_df)
 
 
@@ -167,7 +169,7 @@ allMN.do[ , ActivityIdentifier , ]
 
 #' So it's obvious to me that there are multipart obs in these data (multi row at one location and date), and here we
 #' have ignored those as we developed the variables that we will use to cross
-#' these two datasets in search of duplicated variables. This means that we won't really 
+#' these two datasets in search of duplicated variables. This means that we won't really check for duplicated measures, but instead duplicated locations/sampling runs (profiles)...
 
 
 # Remove Dups Between WQP & MPCA ------------------------------------
@@ -198,75 +200,75 @@ MN_df = MN_df %>% #Finally remove the duplicate ones from the MNPCA data set
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
   anti_join(MN.Duplicate.Profiles, by = "Profile") #Use anti_join to remove anything that overlaps
 
-# # Summarize the MNPCA Data #434023 obs
-MN_df %>%
-  group_by(MonitoringLocationIdentifier)%>%
-  summarise(n = n()) #8,470 Sample Sites
-MN_df %>%
-  group_by(DOW)%>%
-  summarise(n = n()) #4,358 Lakes
-MN_df %>%
-  mutate(Year = year(mdy(DATE)))%>%
-  group_by(Year)%>%
-  summarise(n = n()) #80 Years
-MN_df %>%
-  mutate(Year = year(mdy(DATE)))%>%
-  group_by(DOW, Year)%>%
-  summarise(n = n()) #22,981 Lake-Years
-MN_df %>%
-  mutate(Year = year(mdy(DATE)),
-         DOY = yday(mdy(DATE)))%>%
-  group_by(MonitoringLocationIdentifier, Year, DOY)%>%
-  summarise(n = n()) #40,120 Profiles
+# # # Summarize the MNPCA Data #434023 obs
+# MN_df %>%
+#   group_by(MonitoringLocationIdentifier)%>%
+#   summarise(n = n()) #8,470 Sample Sites
+# MN_df %>%
+#   group_by(DOW)%>%
+#   summarise(n = n()) #4,358 Lakes
+# MN_df %>%
+#   mutate(Year = year(mdy(DATE)))%>%
+#   group_by(Year)%>%
+#   summarise(n = n()) #80 Years
+# MN_df %>%
+#   mutate(Year = year(mdy(DATE)))%>%
+#   group_by(DOW, Year)%>%
+#   summarise(n = n()) #22,981 Lake-Years
+# MN_df %>%
+#   mutate(Year = year(mdy(DATE)),
+#          DOY = yday(mdy(DATE)))%>%
+#   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
+#   summarise(n = n()) #40,120 Profiles
 
 # # #Check for overlap -- here overlap is okay
 
-#DOW overlap
-WQP.DOW = allMN.do %>%
-  distinct(DOW)
-MN.DOW = MN_df %>%
-  distinct(DOW)%>%
-  inner_join(WQP.DOW) #2269 Overlap of Lakes
-
-#Years overlap
-WQP.Year = allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)))%>%
-  distinct(Year)
-MN.Year = MN_df %>%
-  mutate(Year = year(mdy(DATE)))%>%
-  distinct(Year)%>%
-  inner_join(WQP.Year) #74 Overlap of Years
-
-#Lk Year overlap
-WQP.LkYear = allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)),
-         Lk_Yr = paste(DOW, Year, sep = "/"))%>%
-  distinct(Lk_Yr)
-MN.LkYear = MN_df %>%
-  mutate(Year = year(mdy(DATE)),
-         Lk_Yr = paste(DOW, Year, sep = "/"))%>%
-  distinct(Lk_Yr)%>%
-  inner_join(WQP.LkYear)#4,098 Overlap of Lake Year Combos
-
-#MLI Overlap
-WQP.MLI = allMN.do %>%
-  distinct(MonitoringLocationIdentifier)
-MN.MLI = MN_df %>%
-  distinct(MonitoringLocationIdentifier)%>%
-  inner_join(WQP.MLI) #301 Overlap of MonitoringLocationIdentifier
-
-#profile overlap
-WQP.Profile.Check = allMN.do %>%
-  mutate(Year = year(ymd(ActivityStartDate)),
-         DOY = yday(ymd(ActivityStartDate)),
-         Profile = paste(MonitoringLocationIdentifier, Year, DOY, sep = "/"))%>%
-  distinct(Profile)
-MN.Profile.Check = MN_df %>%
-  mutate(Year = year(mdy(DATE)),
-         DOY = yday(mdy(DATE)),
-         Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
-  distinct(Profile)%>%
-  inner_join(WQP.Profile.Check)#0 Overlap of Profiles
+# #DOW overlap
+# WQP.DOW = allMN.do %>%
+#   distinct(DOW)
+# MN.DOW = MN_df %>%
+#   distinct(DOW)%>%
+#   inner_join(WQP.DOW) #2269 Overlap of Lakes
+# 
+# #Years overlap
+# WQP.Year = allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)))%>%
+#   distinct(Year)
+# MN.Year = MN_df %>%
+#   mutate(Year = year(mdy(DATE)))%>%
+#   distinct(Year)%>%
+#   inner_join(WQP.Year) #74 Overlap of Years
+# 
+# #Lk Year overlap
+# WQP.LkYear = allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)),
+#          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
+#   distinct(Lk_Yr)
+# MN.LkYear = MN_df %>%
+#   mutate(Year = year(mdy(DATE)),
+#          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
+#   distinct(Lk_Yr)%>%
+#   inner_join(WQP.LkYear)#4,098 Overlap of Lake Year Combos
+# 
+# #MLI Overlap
+# WQP.MLI = allMN.do %>%
+#   distinct(MonitoringLocationIdentifier)
+# MN.MLI = MN_df %>%
+#   distinct(MonitoringLocationIdentifier)%>%
+#   inner_join(WQP.MLI) #301 Overlap of MonitoringLocationIdentifier
+# 
+# #profile overlap
+# WQP.Profile.Check = allMN.do %>%
+#   mutate(Year = year(ymd(ActivityStartDate)),
+#          DOY = yday(ymd(ActivityStartDate)),
+#          Profile = paste(MonitoringLocationIdentifier, Year, DOY, sep = "/"))%>%
+#   distinct(Profile)
+# MN.Profile.Check = MN_df %>%
+#   mutate(Year = year(mdy(DATE)),
+#          DOY = yday(mdy(DATE)),
+#          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
+#   distinct(Profile)%>%
+#   inner_join(WQP.Profile.Check)#0 Overlap of Profiles
 
 #Clean
 rm(WQP.Profiles, MN.Duplicate.Profiles, WQP.Profile.Check,MN.Profile.Check,
@@ -275,7 +277,7 @@ gc()
 
 
 
-# Add Geom Ratio to Lake Area Data & Merge to our data ------------------------------------------------------
+# Add Geom Ratio to Lake Area Data------------------------------------------------------
 
 LakeDepthArea = LakeDepthArea %>% 
   # filter(lake_states == "MN")%>% #We are only looking at MN lakes right now, but we can add the GR to the whole dataset
@@ -284,160 +286,214 @@ LakeDepthArea = LakeDepthArea %>%
   # filter(GR < 4) #simultaneously with a GR greater than 4 do not stratify. Here we leave GR in the data so that all filtering can happen simultaneously
 
 
+
+
+
+# Join datasets (FLAGGED: bad join) -----------------------------------------------------------
+# Originally, this join resulted in duplicates for various reasons, including duplicating monitoring location identifiers because of multiple nhdplusv2_comid, lagosne_lagoslakeid per monitoringlocation identifier. Now we have specified thata a multiple match should nab only the first match (but note that that is not a very specific way to execute a join).
+
+
 #WQP
 #Connect "lake areas to the metadata from WQP:
+#This join is lookin' crazy. 
+
+# Link is a table of WQP (storet) ids and lagoslake ids, Lake Depth area looks like a LAGOS product? And MN.allsites is WQP metdata, 
+setDT(Link)
+Link[ , .N , "lagoslakeid"][N>1]
+setDT(LakeDepthArea)
+LakeDepthArea[ , .N , "lagoslakeid" ]
+
+
+Link %>% #this guys shows LAGOS codes for WQP stations
+  # select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>% # get rid of extra columns in the data to keep it simpler
+  full_join( . , LakeDepthArea, relationship = "many-to-one", suffix = c(".link", ".lakedeptharea")) %>% #lagoslakeid also contains all the basins for lakes This join BLOWS UP. Def many to many
+  rename(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
+  left_join(MN.allsites,.,  relationship = "one-to-many", suffix = c(".linkXlakedep", ".mnallsites")) %>% 
+  left_join(allMN.do, . ,   multiple = "first", suffix = c(".linkXlakedepXmnallsites", ".allmndo")) %>% #specifying multiple here prevent duplication of data at the cost of taking the first case in the all.sites set which is totally ambiguous
+  { WQPdata_joined <<- .}
+#for this join, we could do better by figuring out which columns will be important to us in the future and choosing more wisely how to match records (i.e., prep datasets to preserve info prior to the joins and avoid using first matches)
+
+
+#' 
+#' link2<-MN.WQP%>%select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid", 
+#'                          "MonitoringLocationIdentifier", "DOW"))%>%
+#'   unique()
+#' #write.csv(link2, "link2.csv")
+#' 
+#' #' No idea why this command is in here. Grabs a few bit of lakeinfo out of the WQP data:
+#' # 
+#' # df = MN.WQP %>%
+#' #   filter(DOW == "03035900" |
+#' #            DOW == "03038300" |
+#' #            DOW == "10004800" |
+#' #            DOW == "11047200" |
+#' #            DOW == "18021100" |
+#' #            DOW == "19600600" |
+#' #            DOW == "27009800" |
+#' #            DOW == "29013000" |
+#' #            DOW == "62005400" |
+#' #            DOW == "77015002" |
+#' #            DOW == "80003800" |
+#' #            DOW == "85001102")%>%
+#' #   select(DOW,lake_waterarea_ha, lake_maxdepth_m, GR )%>%
+#' #   distinct(DOW, .keep_all = T)
 
 
 
+# munging: all depths to m ------------------------------------
+#note one case of mm. did some digging, looks like a misentry of meters
+WQPdata_joined %>% 
+  group_by(ActivityDepthHeightMeasure.MeasureUnitCode) %>% 
+  summarize(n = n())
 
-Link %>%
-  # select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>%#get rid of extra columns in the data to keep it simpler
-  inner_join(LakeDepthArea, by = "lagoslakeid") %>% #lagoslakeid also contains all the basins for lakes
-  mutate(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
-  inner_join(MN.allsites,., by = "MonitoringLocationIdentifier", 
-             multiple = "first") %>%   #Joining by wqp monitoring location identifier
+WQPdata_joined %>% 
+  group_by(ActivityIdentifier == "MNPCA-69-0498-00-201.1509220948.130F" ) %>% 
+  summarize(n = n())
 
-
-
-
-MN.WQP = 
-  inner_join(allMN.do, by = "MonitoringLocationIdentifier")
-
-# warning: many2many join -------------------------------------------------
-
-link2<-MN.WQP%>%select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid", 
-                         "MonitoringLocationIdentifier", "DOW"))%>%
-  unique()
-#write.csv(link2, "link2.csv")
-
-#' No idea why this command is in here. Grabs a few bit of lakeinfo out of the WQP data:
-# 
-# df = MN.WQP %>%
-#   filter(DOW == "03035900" |
-#            DOW == "03038300" |
-#            DOW == "10004800" |
-#            DOW == "11047200" |
-#            DOW == "18021100" |
-#            DOW == "19600600" |
-#            DOW == "27009800" |
-#            DOW == "29013000" |
-#            DOW == "62005400" |
-#            DOW == "77015002" |
-#            DOW == "80003800" |
-#            DOW == "85001102")%>%
-#   select(DOW,lake_waterarea_ha, lake_maxdepth_m, GR )%>%
-#   distinct(DOW, .keep_all = T)
+WQPdata_joined %>% 
+  filter(ActivityDepthHeightMeasure.MeasureUnitCode == "mm")
 
 
-
-# munging: round all depths to whole m ------------------------------------
-
-
+# USE case when
 #Prepare for joining of the Minnesota Data
-MN.feet.WQP = MN.WQP %>% #Convert feet to meters
-  filter(ActivityDepthHeightMeasure.MeasureUnitCode == "feet"|
-           ActivityDepthHeightMeasure.MeasureUnitCode == "ft")%>%
-  mutate(Depth = round(ActivityDepthHeightMeasure.MeasureValue * 0.3038))
-MN.meters.WQP = MN.WQP %>% #Join the meters together and remove NA values
-  filter(ActivityDepthHeightMeasure.MeasureUnitCode == "m" |
-           ActivityDepthHeightMeasure.MeasureUnitCode == "meters") %>%
-  mutate(Depth = round(ActivityDepthHeightMeasure.MeasureValue))%>%
-  full_join(MN.feet.WQP)%>%
-  select(!ActivityDepthHeightMeasure.MeasureUnitCode)
+WQPdata_joined %>% 
+  mutate(Depth_meters = case_when(ActivityDepthHeightMeasure.MeasureUnitCode == "ft" | ActivityDepthHeightMeasure.MeasureUnitCode == "feet" ~ round(ActivityDepthHeightMeasure.MeasureValue * 0.3038 , digits = 2),
+                           ActivityDepthHeightMeasure.MeasureUnitCode == "m" | ActivityDepthHeightMeasure.MeasureUnitCode == "meters" |
+                             ActivityDepthHeightMeasure.MeasureUnitCode == "mm" ~ round(ActivityDepthHeightMeasure.MeasureValue, digits = 2) # this case includes a unit "mm" that was deemed a misentry of "m"
+  )) %>% 
+  {WQPdata_joined <<- . }
 
 #Separate Temperature and DO
-MN.fah.WQP = MN.meters.WQP %>% #Convert fahrenheit to celsius
-  filter(CharacteristicName == "Temperature, water")%>%
-  filter(ResultMeasure.MeasureUnitCode == "deg F")%>%
-  mutate(Temperature = (ResultMeasureValue - 32) * 5/9)
+setDT(WQPdata_joined)
+WQPdata_joined[ , .N , .(CharacteristicName, ResultMeasure.MeasureUnitCode) ]
 
-MN.cel.WQP = MN.meters.WQP %>%  #Join the celsius together and separate Temp from DO
-  filter(CharacteristicName == "Temperature, water")%>%
-  filter(ResultMeasure.MeasureUnitCode == "deg C")%>%
-  mutate(Temperature = ResultMeasureValue)%>%
-  full_join(MN.fah.WQP) %>%
+WQPdata_joined %>% 
+  mutate(ResultMeasureValue = case_when(
+    CharacteristicName == "Temperature, water" & ResultMeasure.MeasureUnitCode == "deg F" ~ (ResultMeasureValue - 32) * 5/9 , 
+    CharacteristicName == "Temperature, water" & ResultMeasure.MeasureUnitCode == "deg C" ~ ResultMeasureValue,
+    CharacteristicName == "Dissolved oxygen (DO)" ~ ResultMeasureValue,
+    .default = ResultMeasureValue
+  ))%>% 
+  mutate(ResultMeasure.MeasureUnitCode = case_when(
+    CharacteristicName == "Temperature, water" & ResultMeasure.MeasureUnitCode == "deg F" ~ "deg C", 
+    CharacteristicName == "Dissolved oxygen (DO)" ~ "mg/l",
+    .default = ResultMeasure.MeasureUnitCode
+  )) %>% 
   mutate(Latitude = lake_lat_decdeg                                    ,
          Longitude = lake_lon_decdeg                                   ,
          Max_Depth = lake_maxdepth_m                                   ,
-         MonitoringLocationIdentifier                                  ,
          Date = ActivityStartDate                                      ,
-         DOY = yday(Date),
-         Year = year(Date))%>%
-  select(c(MonitoringLocationIdentifier, Year, Date, DOY, DOW,
-           Depth, Temperature, Latitude, Longitude, Max_Depth, OrganizationIdentifier.y))
+         DOY = lubridate::yday(ActivityStartDate),
+         Year = lubridate::year(ActivityStartDate))%>% 
+  {WQPdata_joined <<- . }
+
+#move up the cols we need:
+glimpse(WQPdata_joined)
+
+WQPdata_joined[ , .N , .(is.na(lagoslakeid), is.na(DOW))]
+
+cols = as.character(expression(lagoslakeid, lake_namegnis, DOW, Latitude, Longitude,
+                               OrganizationIdentifier, OrganizationFormalName, 
+                               Year, DOY, Date,
+                               MonitoringLocationIdentifier, Max_Depth, GR,
+                               Depth_meters,
+                               ResultMeasureValue, ResultMeasure.MeasureUnitCode))
+
+setcolorder(WQPdata_joined, cols)
+
+                        
+WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "mg/l" & CharacteristicName == "Dissolved oxygen saturation") , .N, lagoslakeid]
+WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "mg/l" & CharacteristicName == "Dissolved oxygen saturation") , summary(ResultMeasureValue), lagoslakeid ] # these are indeed %sat vals
+WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "mg/l" & CharacteristicName == "Dissolved oxygen saturation") , ResultMeasure.MeasureUnitCode := "%" ]
+
+# funky temp records
+WQPdata_joined[ (!ResultMeasure.MeasureUnitCode == "deg C" |is.na(ResultMeasure.MeasureUnitCode)) & CharacteristicName == "Temperature, water" , .N, lagoslakeid]
+WQPdata_joined[ (!ResultMeasure.MeasureUnitCode == "deg C" |is.na(ResultMeasure.MeasureUnitCode)) & CharacteristicName == "Temperature, water" ,  summary(ResultMeasureValue), lagoslakeid]
+WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "mg/l" ) & CharacteristicName == "Temperature, water" , ResultMeasure.MeasureUnitCode := "deg C" ]
+
+#check our work:
+WQPdata_joined[ , .N , .(CharacteristicName, ResultMeasure.MeasureUnitCode) ]
 
 
-MN.WQP.join = MN.meters.WQP %>% #Separate DO from Temp
-  filter(ResultMeasure.MeasureUnitCode == "mg/l")%>%
-  mutate(DO = ResultMeasureValue,
-         Latitude = lake_lat_decdeg                                    ,
-         Longitude = lake_lon_decdeg                                   ,
-         Max_Depth = lake_maxdepth_m                                   ,
-         MonitoringLocationIdentifier                                  ,
-         Date = ActivityStartDate                                      ,
-         DOY = yday(Date),
-         Year = year(Date)) %>%
-  select(c(MonitoringLocationIdentifier, Year, Date, DOY, DOW,
-           Depth, DO, Latitude, Longitude, Max_Depth, OrganizationIdentifier.y)) %>%
-  inner_join(MN.cel.WQP) %>% #Join back together to make sure we have a temp and DO for every temp
-  group_by(MonitoringLocationIdentifier, Year, Date, DOY, DOW,
-           Depth, Latitude, Longitude, Max_Depth, OrganizationIdentifier.y)%>%
-  summarise(DO = mean(DO), #This will remove duplicates in the observations
-            Temperature = mean(Temperature))%>%
-  ungroup()
+
+
+#here we can see that this dataset contains many duplicated records, especially when squeezed to the parameters of interest to us (see also line 292)
+sum(duplicated(WQPdata_joined))
+WQPdata_joined[ , .N , . (lagoslakeid, lake_namegnis, DOW, Latitude, Longitude,
+                        OrganizationIdentifier, OrganizationFormalName, 
+                        Year, DOY, Date,
+                        MonitoringLocationIdentifier, Max_Depth, GR,
+                        Depth_meters, 
+                        CharacteristicName, ResultMeasureValue, ResultMeasure.MeasureUnitCode
+                    )][ , .N , N]
+
+
+WQPdata_joined_thinned <- WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "deg C" & CharacteristicName == "Temperature, water") |
+                                           (ResultMeasure.MeasureUnitCode == "mg/l" & CharacteristicName == "Dissolved oxygen (DO)")
+                                          & !is.na(Depth_meters), 
+                                          . (lagoslakeid, lake_namegnis, DOW, Latitude, Longitude,
+                                             OrganizationIdentifier, OrganizationFormalName, 
+                                             Year, DOY, Date,
+                                             MonitoringLocationIdentifier, Max_Depth, GR,
+                                             Depth_meters, 
+                                             CharacteristicName,ResultMeasureValue, ResultMeasure.MeasureUnitCode)][!duplicated(
+                                               WQPdata_joined[  (ResultMeasure.MeasureUnitCode == "deg C" & CharacteristicName == "Temperature, water") |
+                                                                  (ResultMeasure.MeasureUnitCode == "mg/l" & CharacteristicName == "Dissolved oxygen (DO)")
+                                                                & !is.na(Depth_meters) , 
+                                                               . (lagoslakeid, lake_namegnis, DOW, Latitude, Longitude,
+                                                                  OrganizationIdentifier, OrganizationFormalName, 
+                                                                  Year, DOY, Date,
+                                                                  MonitoringLocationIdentifier, Max_Depth, GR,
+                                                                  Depth_meters, 
+                                                                  CharacteristicName, ResultMeasureValue, ResultMeasure.MeasureUnitCode)]) , , ]
+
+#check our work:
+WQPdata_joined_thinned[ , .N , .(CharacteristicName, ResultMeasure.MeasureUnitCode) ]
+
+#cast this wide
+WQPdata_joined_thinned_wide  <- dcast( WQPdata_joined_thinned , 
+            lagoslakeid + lake_namegnis + DOW + Latitude + Longitude +
+              OrganizationIdentifier + OrganizationFormalName +
+              Year + DOY + Date +
+              MonitoringLocationIdentifier + Max_Depth + GR +
+              Depth_meters ~ CharacteristicName,
+            value.var = list("ResultMeasureValue","ResultMeasure.MeasureUnitCode"), 
+            fun.aggregate = list(mean, last),
+            fill = NA)
+
+setnames(WQPdata_joined_thinned_wide, old = c("ResultMeasureValue_mean_Dissolved oxygen (DO)","ResultMeasureValue_mean_Temperature, water"), 
+         new = c("do_mgperl", "watertemp_celcius"))
+WQPdata_joined_thinned_wide[ , ':=' ("ResultMeasure.MeasureUnitCode_last_Dissolved oxygen (DO)" = NULL, "ResultMeasure.MeasureUnitCode_last_Temperature, water" = NULL), ] 
+
+
+WQPdata_joined_thinned_wide[ , .N , is.na(GR) ]
 
 
 
-
-
-
-
-#Summary of Data #588732 obs
-MN.WQP.join %>%
-  group_by(MonitoringLocationIdentifier)%>%
-  summarise(n = n()) #2,438 MLI
-MN.WQP.join %>%
-  group_by(DOW)%>%
-  summarise(n = n()) #1,220 Lakes
-MN.WQP.join %>%
-  group_by(Year)%>%
-  summarise(n = n()) #71 Years
-MN.WQP.join %>%
-  group_by(DOW, Year)%>%
-  summarise(n = n()) #7,300 Lake-Years
-MN.WQP.join %>%
-  group_by(MonitoringLocationIdentifier, Year, DOY)%>%
-  summarise(n = n()) #53,616 Profiles
-
+# 
+# #Summary of Data #588732 obs
+# MN.WQP.join %>%
+#   group_by(MonitoringLocationIdentifier)%>%
+#   summarise(n = n()) #2,438 MLI
+# MN.WQP.join %>%
+#   group_by(DOW)%>%
+#   summarise(n = n()) #1,220 Lakes
+# MN.WQP.join %>%
+#   group_by(Year)%>%
+#   summarise(n = n()) #71 Years
+# MN.WQP.join %>%
+#   group_by(DOW, Year)%>%
+#   summarise(n = n()) #7,300 Lake-Years
+# MN.WQP.join %>%
+#   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
+#   summarise(n = n()) #53,616 Profiles
+# 
 
 #Clean up
-rm(MN.allsites, MN.cel.WQP, MN.fah.WQP, MN.feet.WQP, MN.LakeDepthArea,
-   MN.meters.WQP, MN.WQP, Link, LakeDepthArea, all.MN.DOW)
+rm(WQPdata_joined, WQPdata_joined_thinned)
 gc()
 
 
-
-# filter: geometry rato <4 ------------------------------------------------
-
-
-#  MNPCA
-MN.sum.long = MN_sum %>%
-  mutate(DOW = as.factor(DOW),###converts ID to factor, not character
-         Z_m = Max_Depth_Ft*0.3048,
-         area_km = Lake_Area_Acres*0.00404686,
-         GR = (area_km^0.25)/Z_m)%>%###look at geometry ratio of lakes to filter out unstratified systems
-  ###stefan et al 1996 GR=(A^0.25)/Zmax #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
-  filter(GR < 4) %>% ###filter out lakes with GR>4 
-  pivot_longer("1945":"2019",names_to = "Yr", #pivot longer
-               values_to = "n_profile")%>%
-  mutate(Year = as.numeric(Yr),
-         DOW_yr = as.character(paste(DOW,"_",Year)))
-#  Make a data frame of max depths for metadata
-MN.sum.depths = MN.sum.long%>%
-  distinct(DOW, .keep_all = T)%>%
-  mutate(DOW2 = DOW,
-         Max_Depth = Z_m)%>%
-  select(c("DOW2", "Max_Depth"))
 
 
 
@@ -448,7 +504,7 @@ MN_df2 = MN_DF %>%
   mutate(DOW2 = as.factor(substring(DOW_DATE_AGENCY_PROFID,1,6)),###make DOW with leading 0s
          Year = year(mdy(DATE)),
          DOW_yr = as.character(paste(DOW2,"_",Year))) %>%
-  filter(DOW_yr %in% MN.sum.long$DOW_yr) %>% #Removes DOW that had a GR greater than 4
+  # filter(DOW_yr %in% MN.sum.long$DOW_yr) %>% #Removes DOW that had a GR greater than 4
   inner_join(MN.station, by = "DOW") %>% #Adding a metadata file with Lat and Lon
   inner_join(MN.sum.depths, by = "DOW2")%>% #Adding max depth metadata
   mutate(Date = mdy(DATE),
@@ -605,6 +661,30 @@ gc()
 #  Run time is about 3.5 minutes
 
 MN.ALL.Data = read_csv("MN.ALL.DATA.csv") 
+
+
+# filter: geometry rato <4 ------------------------------------------------
+
+
+#  MNPCA
+MN.sum.long = MN_sum %>%
+  mutate(DOW = as.factor(DOW),###converts ID to factor, not character
+         Z_m = Max_Depth_Ft*0.3048,
+         area_km = Lake_Area_Acres*0.00404686,
+         GR = (area_km^0.25)/Z_m)%>%###look at geometry ratio of lakes to filter out unstratified systems
+  ###stefan et al 1996 GR=(A^0.25)/Zmax #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
+  filter(GR < 4) %>% ###filter out lakes with GR>4 
+  pivot_longer("1945":"2019",names_to = "Yr", #pivot longer
+               values_to = "n_profile")%>%
+  mutate(Year = as.numeric(Yr),
+         DOW_yr = as.character(paste(DOW,"_",Year)))
+#  Make a data frame of max depths for metadata
+MN.sum.depths = MN.sum.long%>%
+  distinct(DOW, .keep_all = T)%>%
+  mutate(DOW2 = DOW,
+         Max_Depth = Z_m)%>%
+  select(c("DOW2", "Max_Depth"))
+
 
 
 # filter: temps< 40 C -----------------------------------------------------
