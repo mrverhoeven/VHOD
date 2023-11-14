@@ -4,6 +4,12 @@
   #Originally written by Jacob Angus 30June2022 (FullMNScript.R)
   #Modified by Heidi Rantala ~Aug 2023 to examine some questionable DO values and filter rule effects (FullMNScript_hmr_2ppm.R)
   #Modified by Mike Verhoeven Oct 2023 to separate data agg and prep from VHOD and TDO3 generation
+
+
+# TO-do list:
+#   1. Work through script deleting extra & deprecated code
+#   2. Rename the input data so that a perosn can logically track packages of related files. 
+#   3. 
  
 
 #  Script for Minnesota that can be run as a job
@@ -28,7 +34,7 @@ library("data.table")
 #  Run time is about 5 minutes
 
 #set wd to the data folder to avoid needing filepaths
-  setwd("data&scripts/data/input")
+  # setwd("data&scripts/data/input")
 
 # Water Quality Portal Data -----------------------------------------------
 
@@ -289,7 +295,7 @@ LakeDepthArea = LakeDepthArea %>%
 
 
 
-# Join datasets (FLAGGED: bad join) -----------------------------------------------------------
+# Join WQP datasets (FLAGGED: bad join) -----------------------------------------------------------
 # Originally, this join resulted in duplicates for various reasons, including duplicating monitoring location identifiers because of multiple nhdplusv2_comid, lagosne_lagoslakeid per monitoringlocation identifier. Now we have specified thata a multiple match should nab only the first match (but note that that is not a very specific way to execute a join).
 
 
@@ -305,7 +311,7 @@ LakeDepthArea[ , .N , "lagoslakeid" ]
 
 
 Link %>% #this guys shows LAGOS codes for WQP stations
-  # select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>% # get rid of extra columns in the data to keep it simpler
+  select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>% # get rid of extra columns in the data to keep it simpler
   full_join( . , LakeDepthArea, relationship = "many-to-one", suffix = c(".link", ".lakedeptharea")) %>% #lagoslakeid also contains all the basins for lakes This join BLOWS UP. Def many to many
   rename(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
   left_join(MN.allsites,.,  relationship = "one-to-many", suffix = c(".linkXlakedep", ".mnallsites")) %>% 
@@ -340,7 +346,7 @@ Link %>% #this guys shows LAGOS codes for WQP stations
 
 
 
-# munging: all depths to m ------------------------------------
+# *Clean up measurements & units of T and DO ------------------------------------
 #note one case of mm. did some digging, looks like a misentry of meters
 WQPdata_joined %>% 
   group_by(ActivityDepthHeightMeasure.MeasureUnitCode) %>% 
@@ -379,8 +385,8 @@ WQPdata_joined %>%
     CharacteristicName == "Dissolved oxygen (DO)" ~ "mg/l",
     .default = ResultMeasure.MeasureUnitCode
   )) %>% 
-  mutate(Latitude = lake_lat_decdeg                                    ,
-         Longitude = lake_lon_decdeg                                   ,
+  mutate(Latitude = LatitudeMeasure                                    ,
+         Longitude = LongitudeMeasure                                   ,
          Max_Depth = lake_maxdepth_m                                   ,
          Date = ActivityStartDate                                      ,
          DOY = lubridate::yday(ActivityStartDate),
@@ -392,11 +398,11 @@ glimpse(WQPdata_joined)
 
 WQPdata_joined[ , .N , .(is.na(lagoslakeid), is.na(DOW))]
 
-cols = as.character(expression(lagoslakeid, lake_namegnis, DOW, Latitude, Longitude,
+cols = as.character(expression(lagoslakeid, lake_namegnis, DOW, 
                                OrganizationIdentifier, OrganizationFormalName, 
                                Year, DOY, Date,
-                               MonitoringLocationIdentifier, Max_Depth, GR,
-                               Depth_meters,
+                               Max_Depth, GR,
+                               MonitoringLocationIdentifier,Latitude, Longitude, Depth_meters,
                                ResultMeasureValue, ResultMeasure.MeasureUnitCode))
 
 setcolorder(WQPdata_joined, cols)
@@ -414,6 +420,9 @@ WQPdata_joined[ (ResultMeasure.MeasureUnitCode == "mg/l" ) & CharacteristicName 
 #check our work:
 WQPdata_joined[ , .N , .(CharacteristicName, ResultMeasure.MeasureUnitCode) ]
 
+
+
+# *delete duplicates and consolidate data ---------------------------------
 
 
 
@@ -467,6 +476,11 @@ WQPdata_joined_thinned_wide[ , ':=' ("ResultMeasure.MeasureUnitCode_last_Dissolv
 
 
 WQPdata_joined_thinned_wide[ , .N , is.na(GR) ]
+WQPdata_joined_thinned_wide[ , .N , .(hastemps = !is.na(watertemp_celcius), hasDO = !is.na(do_mgperl))]
+WQPdata_joined_thinned_wide [ , .N , .(lagoslakeid, DOW) ] 
+WQPdata_joined_thinned_wide [!is.na(GR) & !is.na(watertemp_celcius) & !is.na(do_mgperl) & !is.na(Depth_meters)  , .N , .(lagoslakeid, DOW, MonitoringLocationIdentifier, Year, DOY) ] 
+
+#keep only complete records eventually
 
 
 
@@ -493,14 +507,32 @@ WQPdata_joined_thinned_wide[ , .N , is.na(GR) ]
 rm(WQPdata_joined, WQPdata_joined_thinned)
 gc()
 
+# Add Geom Ratio to MPCA data ------------------------------------------------
 
 
-
-
+#  MNPCA
+MN_sum %>%
+  mutate(DOW = as.factor(DOW),###converts ID to factor, not character
+         Z_m = Max_Depth_Ft*0.3048,
+         area_km = Lake_Area_Acres*0.00404686,
+         GR = (area_km^0.25)/Z_m)%>%###look at geometry ratio of lakes to filter out unstratified systems
+  ###stefan et al 1996 GR=(A^0.25)/Zmax #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
+  # filter(GR < 4) %>% ###filter out lakes with GR>4 
+  pivot_longer("1945":"2019",names_to = "Yr", #pivot longer
+               values_to = "n_profile")%>%
+  mutate(Year = as.numeric(Yr),
+         DOW_yr = as.character(paste(DOW,"_",Year))) %>% 
+  
+#  Make a data frame of max depths for metadata [WTF is this?]
+MN.sum.depths = MN.sum.long%>%
+  distinct(DOW, .keep_all = T)%>%
+  mutate(DOW2 = DOW,
+         Max_Depth = Z_m)%>%
+  select(c("DOW2", "Max_Depth"))
 # Note: this command uses bad DOW var extensively -------------------------
 
 ###  pull lakes from profile dataset
-MN_df2 = MN_DF %>%
+MN_df2 = MN_df %>%
   mutate(DOW2 = as.factor(substring(DOW_DATE_AGENCY_PROFID,1,6)),###make DOW with leading 0s
          Year = year(mdy(DATE)),
          DOW_yr = as.character(paste(DOW2,"_",Year))) %>%
@@ -564,6 +596,9 @@ MN.data.forjoin = MN.WQP.join %>%
   mutate(Year = year(Date),
          DOY = yday(Date))%>%
   ungroup()
+
+# HMR Green Lake add ------------------------------------------------------
+
 
 #  Heidi has some additional data for Green Lake in Kandiyohi County
 Green.Lake.fromH = read_csv("DOTEMP_Green.csv")%>%
@@ -663,27 +698,7 @@ gc()
 MN.ALL.Data = read_csv("MN.ALL.DATA.csv") 
 
 
-# filter: geometry rato <4 ------------------------------------------------
 
-
-#  MNPCA
-MN.sum.long = MN_sum %>%
-  mutate(DOW = as.factor(DOW),###converts ID to factor, not character
-         Z_m = Max_Depth_Ft*0.3048,
-         area_km = Lake_Area_Acres*0.00404686,
-         GR = (area_km^0.25)/Z_m)%>%###look at geometry ratio of lakes to filter out unstratified systems
-  ###stefan et al 1996 GR=(A^0.25)/Zmax #(Gorham and Boyce, 1989) is one of the first paper to use Geometric Ratio
-  filter(GR < 4) %>% ###filter out lakes with GR>4 
-  pivot_longer("1945":"2019",names_to = "Yr", #pivot longer
-               values_to = "n_profile")%>%
-  mutate(Year = as.numeric(Yr),
-         DOW_yr = as.character(paste(DOW,"_",Year)))
-#  Make a data frame of max depths for metadata
-MN.sum.depths = MN.sum.long%>%
-  distinct(DOW, .keep_all = T)%>%
-  mutate(DOW2 = DOW,
-         Max_Depth = Z_m)%>%
-  select(c("DOW2", "Max_Depth"))
 
 
 
