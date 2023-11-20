@@ -115,9 +115,9 @@ MN.station = read_csv("MNstation.csv") %>% #Metadata for all MNPCA sites
   separate(MonitoringLocationIdentifier, into = c("MNPCA", "County", "Township", "LakeID", "Basin"), sep = "-", remove = F)%>%
   unite(col = DOW, c("County", "Township", "LakeID"), sep = "")%>%
   select(c(DOW, LatitudeMeasure, LongitudeMeasure))%>%
-  distinct(DOW, .keep_all = T)
+  distinct(DOW, .keep_all = T) #This line says return ONLY a single station in any given lake....
 
-#' this code botches the DOW and recovers NOT station locs, but lake locs...
+#' ^^this code botches the DOW and recovers NOT station locs, but lake locs...
 
 
 #  Here we are creating Monitoring Location Identifiers for the MNPCA and MNDNR

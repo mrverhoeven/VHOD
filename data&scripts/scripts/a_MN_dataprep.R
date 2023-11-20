@@ -21,7 +21,7 @@
 # STD list:
 #   1. Work through script deleting extra & deprecated code
 #   2. Rename the input data so that a person can logically track packages of related files. 
-#   3. 
+#   3. Remove duplicated profiles (currently just tagged in MNPCA data because of the issue outlined in the remove dups section)
  
 
 # load packages -----------------------------------------------------------
@@ -104,7 +104,7 @@ WQP_observations %>%  #157,124 Profiles  - New work matches old work
 
 #Review the DOW blanks
 WQP_observations[is.na(DOW), .N , MonitoringLocationIdentifier]
-#do these have metadata records? Connect them to the metadata then count how many have no location data? None!
+#do these have metadata records? Connect them to the metadata then count how many have no location data? None! Then check for names-- 371 obs at unnamed locations
 WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier)][is.na(DOW), .N , .(is.na(LatitudeMeasure), is.na(LatitudeMeasure))]
 WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier)][is.na(DOW), .N , is.na(MonitoringLocationName)]
 # These are multiline records because they are both structred as long data (temp and 02 as their own rows) and they are also multi-measure profiles
@@ -112,8 +112,7 @@ WQP_observations[ , .N , .(MonitoringLocationIdentifier,ActivityStartDate, Chara
 WQP_observations[ , .N , is.na(DOW)]
 #NA dows / total records:
 284543/(284543+1933202)
-# So this file still has about 13% missing DOWs 
-
+# So this file still has about 13% missing DOWs which is the primary difference from the old work, but the number of records is the same (157,124)
 
 
 
@@ -125,56 +124,49 @@ PCA_profiles = read_csv("1945_2020_All_MNDNR_MPCA_Temp_DO_Profiles.csv") #Lake P
 PCA_metadata = fread("MNstation.csv")#Metadata for all MNPCA sites
 
 # get DOW into the station data
-
-MN.station[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]# Here we also need to make DOW from Monitoring Location Identifier
+PCA_metadata[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]# Here we also need to make DOW from Monitoring Location Identifier
   
-MN.station[ , .N , .(DOW, LatitudeMeasure, LongitudeMeasure) ][N>1 , .N] # how many cases where a DOW has > 1 lat & lon?
-MN.station[!is.na(DOW) , length(unique(LatitudeMeasure)) , .(DOW) ][ ,summary(V1) ,] # this suggests there are 134 unique locs in one of the dows in these data
-# Not using these now, but might need to...
-#   select(c(DOW, LatitudeMeasure, LongitudeMeasure))%>%
-#   distinct(DOW, .keep_all = T)
-
-
+PCA_metadata[ , .N , .(DOW, LatitudeMeasure, LongitudeMeasure) ][N>1 , .N] # how many cases where a DOW has > 1 lat & lon?
+PCA_metadata[!is.na(DOW) , length(unique(LatitudeMeasure)) , .(DOW) ][V1>100, ,] # this suggests there are 134 unique locs in one of the dows in these data (Thats Basswood Lake. There probably ARE...)
 
 #  Here we are creating Monitoring Location Identifiers for the MNPCA and MNDNR
 #  dataset. They have "PROFID" and DOW which can be combined to make a 
 #  Monitoring Location Identifier. This will later help when removing duplicate
 #  profiles and joining the data together.
-MN_df <-  MN_df %>% 
+names(PCA_profiles)
+PCA_profiles <-  PCA_profiles %>% 
   separate(DOW_DATE_AGENCY_PROFID, into = c("DOW", "DATE", "AGENCY", "PROFID"), sep = "_", remove = F)%>%
-  mutate(Sample.Site = as.integer(PROFID)) %>% #
+  mutate(Sample.Site = as.integer(PROFID)) %>% # This is a bit of a concerning coercion of integers from numerics
   mutate(County = substr(DOW, start = 1, stop = 2),
-         Township = substr(DOW, start = 3, stop = 6),
-         LakeID = substr(DOW, start = 7, stop = 8), #YIKES
+         LakeID = substr(DOW, start = 3, stop = 6),
+         SubbasinID = substr(DOW, start = 7, stop = 8), #YIKES: Here I renamed some things that may not ever cause a problem unless they get misapplied later (See line 132 in the old work)
          MNAgency = paste("MN", AGENCY, sep = ""),
-         MonitoringLocationIdentifier = paste(MNAgency, County, Township, LakeID, Sample.Site, sep = "-"))
-
-
-#' not sure how it gets used in later steps, but that DOW breakdown ^^ is INCORRECT
-
+         MonitoringLocationIdentifier = paste(MNAgency, County, LakeID, SubbasinID, Sample.Site, sep = "-"))
 
 #' check on the monitoring loc id gen
-MN_df[ , "MonitoringLocationIdentifier"  , ] 
-MN_df[ , c("Sample.Site", "PROFID") , ]
+PCA_profiles[ , "MonitoringLocationIdentifier"  , ] 
+PCA_profiles[ , c("Sample.Site", "PROFID") , ]
 
-allMN.do[OrganizationIdentifier=="MNPCA" , .(MonitoringLocationIdentifier)]
+WQP_observations[OrganizationIdentifier=="MNPCA" , .(MonitoringLocationIdentifier)]
 
-as.integer(MN_df$PROFID)
-any(word(MN_df$PROFID, 2, sep = "\\." )!="0")#are there any non-zero sig digits after the decimal? Yes...
-setDT(MN_df)
+as.integer(PCA_profiles$PROFID)
+any(word(PCA_profiles$PROFID, 2, sep = "\\." )!="0")#are there any non-zero sig digits after the decimal? Yes...
+setDT(PCA_profiles) #set as data.table to allow that syntax:
 
+PCA_profiles[word(PROFID, 2, sep = fixed(".")) != "0" , PROFID ,] #tons of decimals in here
+PCA_profiles[word(PROFID, 2, sep = fixed(".")) != "0" , .N ,] #122k to be excact
+# about 1/8 of these records have decimals in those profile IDents. This means that the PROFID variable is going to be dup over many measurements in some cases. 
 
-
-MN_df[word(PROFID, 2, sep = fixed(".")) != "0" , PROFID ,]
-MN_df[word(PROFID, 2, sep = fixed(".")) != "0" , .N ,]
-# about 1/8 of these records ave decimals in those profile IDents. This means that the PROFID variable is going to be dup over many measurements in some cases. 
-
-#can we recover something similar in the WQP data? Like a multipart profile identifier?
-allMN.do[ , ActivityIdentifier , ]
+#can we recover something similar in the WQP data? Like a multipart profile identifier? Keep in mind that these were not built, but instead were shipped with the data
+WQP_observations[OrganizationIdentifier=="MNPCA" , MonitoringLocationIdentifier , ]
 
 #' So it's obvious to me that there are multipart obs in these data (multi row at one location and date), and here we
 #' have ignored those as we developed the variables that we will use to cross
 #' these two datasets in search of duplicated variables. This means that we won't really check for duplicated measures, but instead duplicated locations/sampling runs (profiles)...
+#' This may have NO effect at all, but would result in dumping of PCA data (that's the one that gets cut) where a combo of loc-lake-date matches but has different measurements.
+#' 
+#' This problem warrants a closer look, but moving on for now. Below you'll see that I don't remove those dups, just tag them as such.
+#' ONe note here is that the WQP data are a huge mess in the join/merge to lake attributes. So if a person could remove them from the WQP data instead of PCA you might preserve some data. 
 
 
 # Remove Dups Between WQP & MPCA ------------------------------------
@@ -185,25 +177,26 @@ allMN.do[ , ActivityIdentifier , ]
 #  then we can see which ones are overlapping and remove them from one data set
 
 
-WQP.Profiles = allMN.do %>% # This identifies all unique profiles in the WQP data
+WQP_unique_profileIDs = WQP_observations %>% # This identifies all unique profiles in the WQP data
   mutate(Year = year(ymd(ActivityStartDate)),
          DOY = yday(ymd(ActivityStartDate)),
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
   distinct(Profile)
 
-MN.Duplicate.Profiles = MN_df%>% # This identifies all unique profiles in the MNPCA data
+PCA_WQP.Duplicate.Profiles = PCA_profiles%>% # This identifies all unique profiles in the MNPCA data
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)),
          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
   distinct(Profile)%>%
-  inner_join(WQP.Profiles) # Joins the two together with inner_join, so we only select for the ones that both data sets have
+  inner_join(WQP_unique_profileIDs) # Joins the two together with inner_join, so we only select for the ones that both data sets have
 
 
-MN_df = MN_df %>% #Finally remove the duplicate ones from the MNPCA data set 
+PCA_profiles %>%
   mutate(Year = year(mdy(DATE)),
          DOY = yday(mdy(DATE)),
-         Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
-  anti_join(MN.Duplicate.Profiles, by = "Profile") #Use anti_join to remove anything that overlaps
+         Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/")) %>% 
+  mutate(duplicate_prof_WQP = Profile %in% PCA_WQP.Duplicate.Profiles$Profile) %>%  #Finally remove the duplicate ones from the MNPCA data set 
+  { PCA_profiles <<- .}  #Don't actually remove those reocrds, just add a tag showing duplication in the two datasets
 
 # # # Summarize the MNPCA Data #434023 obs
 # MN_df %>%
