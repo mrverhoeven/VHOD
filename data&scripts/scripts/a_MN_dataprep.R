@@ -1,21 +1,31 @@
+
+# Header ------------------------------------------------------------------
+
+
 #MGLP Project
 
 #Version History:
   #Originally written by Jacob Angus 30June2022 (FullMNScript.R)
   #Modified by Heidi Rantala ~Aug 2023 to examine some questionable DO values and filter rule effects (FullMNScript_hmr_2ppm.R)
-  #Modified by Mike Verhoeven Oct 2023 to separate data agg and prep from VHOD and TDO3 generation
-
-
-# TO-do list:
-#   1. Work through script deleting extra & deprecated code
-#   2. Rename the input data so that a perosn can logically track packages of related files. 
-#   3. 
- 
+  #Modified by Mike Verhoeven Oct 2023 to separate data aggregation and prep fromfiltering, VHOD and TDO3 generation
 
 #  Script for Minnesota that can be run as a job
 #  It can also be run in individual sections
 #  It has five major sections: Data Cleaning and Joining, Filtering,
 #  Interpolation, Calculating VHOD, Calculating TDO3
+
+
+# to-do list --------------------------------------------------------------
+
+
+# STD list:
+#   1. Work through script deleting extra & deprecated code
+#   2. Rename the input data so that a person can logically track packages of related files. 
+#   3. 
+ 
+
+# load packages -----------------------------------------------------------
+
 
 library("tidyverse")
 library("lubridate")
@@ -27,103 +37,92 @@ library("plotly")
 library("skimr")
 library("data.table")
 
-###### Data Cleaning, Preparation, and Joining ==================================
-#  The goal of this section of the script is to filter lakes for
-#  geometric ratio, combine data sets with metadata, and join Minnesota
-#  data sets together. It is split into two sections: WQP and MNPCA
-#  Run time is about 5 minutes
+###### Section 1: Data Cleaning, Preparation, and Joining ==================================
+# 
+# The goals of this section of the script: 
+# 1. filter lakes for geometric ratio, 
+# 2. combine data sets with metadata, and 
+# 3. Join Minnesota data sets together. 
+
+# It is split into two sections: WQP and MNPCA
+
 
 #set wd to the data folder to avoid needing filepaths
-  # setwd("data&scripts/data/input")
+setwd("data&scripts/data/input")
 
-# Water Quality Portal Data -----------------------------------------------
+# Load Data Water Quality Portal  -----------------------------------------------
 
 ### Load files
+
 # WQP 
-  # MN Observations from Water Quality Portal 
-  # allMN.do <- read_csv("MNDataRetrievalCombined.csv") #All MN Observations of Temp and DO from 1940 to 2020 from WQP
-    # problems(allMN.do)
-    # problems(allMN.do)[,"col"] %>% unique()
-    # names(allMN.do)[c(36,58, 17, 18, 19, 42, 38)]
-  # ^^ This read into r has issues-- seems to be squashing SUS/ suspect data codes into NA values. Will use fread:
-  allMN.do = fread("MNDataRetrievalCombined.csv") #All MN Observations of Temp and DO from 1940 to 2020 from WQP
-    # allMN.do[ , .N , .(MeasureQualifierCode, ResultStatusIdentifier)  ]
+# MN Observations from Water Quality Portal 
+WQP_observations = fread("MNDataRetrievalCombined.csv")
+#All MN Observations of Temp and DO from 1940 to 2020 from WQP
+WQP_observations[ , .N , .(CharacteristicName)  ]
 
 
-# This read into r also has issues-- seems to be squashing some variable about watershed area... 
-    # MN.allsites = read_csv("MNDataRetrievalMetadata.csv") #Site data for all the observations above
-    # MN.allsites %>%
-    #   filter(row_number() %in% pull(problems(MN.allsites)[,c("row")])) %>% 
-    #   {probs <<- .}
-  # Again doing this with fread
-  MN.allsites <-  fread("MNDataRetrievalMetadata.csv") #Site data for all the observations above
-  # MN.allsites[ ,.N , DrainageAreaMeasure.MeasureValue]
+# MN metadata from WQP
+WQP_metadata <-  fread("MNDataRetrievalMetadata.csv") #Site data for all the observations above
+WQP_metadata[ ,.N , OrganizationFormalName]
   # probably wasn't a big deal w/ the issues. 
-  
-# No issues in these two files  
-  LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source? also, doubtful...there are only 17675 entries...)
-  Link = read_csv("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
+
+
+# No issues in these two file reads  
+LakeDepthArea = read_csv("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source? also, doubtful...there are only 17675 entries...)
+Link = read_csv("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
 
 #  Convert Monitoring Location Identifier into DOW 
 #  DOW is the official way to identify lakes in Minnesota; whereas,
 #  Monitoring Location Identifiers are specific sites on a lake.
-  allMN.do[ OrganizationIdentifier == "MNPCA" , .N , MonitoringLocationIdentifier ]
+WQP_observations[ OrganizationIdentifier == "MNPCA" , .N , MonitoringLocationIdentifier ]
   
-# FOR MNPCA Records, parse the DOW
-allMN.do[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]
+# FOR MNPCA Records, parse the DOW (previous code did this, in an odd way, then shoved monitoring loc idents into the dow column in the non MNPCA records--line 57-65)
+WQP_observations[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]
   
-    # ^ this line replaces the commented chunk below
-    #   all.MN.do = allMN.do %>%
-    #   filter(OrganizationIdentifier == "MNPCA")%>%
-    #   separate(MonitoringLocationIdentifier, into = c("MNPCA", "County", "LakeID", "ID", "Basin"), sep = "-", remove = F)%>%
-    #   unite(col = DOW, c(County, LakeID, ID), sep = "") %>% 
-    #     anti_join()
-    # 
-    # 
-    # 
-    # mutate(DOW, if_else(ORG = MPCA, operation ,  ))
-    # 
-    # 
-    # all.MN.DOW = allMN.do %>%
-    #   filter(OrganizationIdentifier != "MNPCA")%>% # grab the non MPCA records
-    #   mutate(DOW = MonitoringLocationIdentifier)%>% #shove monitoring locID into DOW -- but why!?!?!
-    #   full_join(all.MN.do.DOW)
 
-#Summary of WQP Data  #2217745 obs
-# allMN.do %>%
-#   group_by(MonitoringLocationIdentifier)%>%
-#   summarise(n = n())  
-# allMN.do %>%
-#   group_by(DOW)%>%
-#   summarise(n = n()) 
-# allMN.do %>%
-#   mutate(Year = year(ymd(ActivityStartDate)))%>%
-#   group_by(Year)%>%
-#   summarise(n = n())
-# allMN.do %>%
-#   mutate(Year = year(ymd(ActivityStartDate)))%>%
-#   group_by(DOW, Year)%>%
-#   summarise(n = n())
-# allMN.do %>%
-#   mutate(Year = year(ymd(ActivityStartDate)),
-#          DOY = yday(ymd(ActivityStartDate)))%>%
-#   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
-#   summarise(n = n()) 
-# 
-allMN.do[ , .N , .(MonitoringLocationIdentifier,ActivityStartDate) ][N>1, .N]
-allMN.do[ , .N , is.na(DOW)]
+# You can see in the following summaries that we align pretty well with the old work. The big difference here is that we have not pushed monitoring loc IDs back into the DOW column, so we end up with a few less "lakes" than in the old work
+#Summary of WQP Data  2217745 obs - New work matches old work
+WQP_observations %>%#7,626 Sample Sites - New work matches old work
+  group_by(MonitoringLocationIdentifier)%>%
+  summarise(n = n())
+WQP_observations %>% # MISMATCHED (old 4,755 Lakes vs. new 3392 lakes) 
+  group_by(DOW)%>%
+  summarise(n = n())
+WQP_observations %>% #78 Years - New work matches old work
+  mutate(Year = year(ymd(ActivityStartDate)))%>%
+  group_by(Year)%>%
+  summarise(n = n())
+WQP_observations %>%  #MISMATCHED (old 24,672 Lake-Years vs. new 19,814 lake-years) #
+  mutate(Year = year(ymd(ActivityStartDate)))%>%
+  group_by(DOW, Year)%>%
+  summarise(n = n())  
+WQP_observations %>%  #157,124 Profiles  - New work matches old work
+  mutate(Year = year(ymd(ActivityStartDate)),
+         DOY = yday(ymd(ActivityStartDate)))%>%
+  group_by(MonitoringLocationIdentifier, Year, DOY)%>%
+  summarise(n = n())
 
+#Review the DOW blanks
+WQP_observations[is.na(DOW), .N , MonitoringLocationIdentifier]
+#do these have metadata records? Connect them to the metadata then count how many have no location data? None!
+WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier)][is.na(DOW), .N , .(is.na(LatitudeMeasure), is.na(LatitudeMeasure))]
+WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier)][is.na(DOW), .N , is.na(MonitoringLocationName)]
+# These are multiline records because they are both structred as long data (temp and 02 as their own rows) and they are also multi-measure profiles
+WQP_observations[ , .N , .(MonitoringLocationIdentifier,ActivityStartDate, CharacteristicName) ][N>1, .N]
+WQP_observations[ , .N , is.na(DOW)]
+#NA dows / total records:
+284543/(284543+1933202)
 # So this file still has about 13% missing DOWs 
 
 
 
 
-# MNPCA Data --------------------------------------------------------------
+# Load Data MNPCA  --------------------------------------------------------------
 
 #  MNPCA
-MN_sum = read_csv("aug_profiles.csv") #Summary of profiles from MNPCA
-MN_df = read_csv("1945_2020_All_MNDNR_MPCA_Temp_DO_Profiles.csv") #Lake Profile data
-MN.station = fread("MNstation.csv")#Metadata for all MNPCA sites
+PCA_summaries = read_csv("aug_profiles.csv") #Summary of profiles from MNPCA
+PCA_profiles = read_csv("1945_2020_All_MNDNR_MPCA_Temp_DO_Profiles.csv") #Lake Profile data
+PCA_metadata = fread("MNstation.csv")#Metadata for all MNPCA sites
 
 # get DOW into the station data
 
@@ -311,11 +310,12 @@ LakeDepthArea[ , .N , "lagoslakeid" ]
 
 
 Link %>% #this guys shows LAGOS codes for WQP stations
-  select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>% # get rid of extra columns in the data to keep it simpler
-  full_join( . , LakeDepthArea, relationship = "many-to-one", suffix = c(".link", ".lakedeptharea")) %>% #lagoslakeid also contains all the basins for lakes This join BLOWS UP. Def many to many
+  # select(c("lagoslakeid","wqp_monitoringlocationidentifier","lake_nhdid")) %>% # get rid of extra columns in the data to keep it simpler
+  filter(!is.na(wqp_monitoringlocationidentifier) & !is.na(lagosne_lagoslakeid) & !is.na(lake_nhdid)) %>% 
+  left_join( . , LakeDepthArea, relationship = "one-to-one", suffix = c(".link", ".lakedeptharea")) %>% #lagoslakeid also contains all the basins for lakes This join BLOWS UP. Def many to many
   rename(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
-  left_join(MN.allsites,.,  relationship = "one-to-many", suffix = c(".linkXlakedep", ".mnallsites")) %>% 
-  left_join(allMN.do, . ,   multiple = "first", suffix = c(".linkXlakedepXmnallsites", ".allmndo")) %>% #specifying multiple here prevent duplication of data at the cost of taking the first case in the all.sites set which is totally ambiguous
+  left_join(. , MN.allsites,  relationship = "many-to-one", na_matches = "never",  suffix = c(".linkXlakedep", ".mnallsites")) %>%  #so... there are many entries in the link for each WQP station? That doesn't make any sense.
+  left_join(allMN.do, . ,   multiple = "first",  suffix = c(".linkXlakedepXmnallsites", ".allmndo")) %>% #specifying multiple here prevent duplication of data at the cost of taking the first case in the all.sites set which is totally ambiguous
   { WQPdata_joined <<- .}
 #for this join, we could do better by figuring out which columns will be important to us in the future and choosing more wisely how to match records (i.e., prep datasets to preserve info prior to the joins and avoid using first matches)
 
@@ -498,9 +498,9 @@ WQPdata_joined_thinned_wide [!is.na(GR) & !is.na(watertemp_celcius) & !is.na(do_
 # MN.WQP.join %>%
 #   group_by(DOW, Year)%>%
 #   summarise(n = n()) #7,300 Lake-Years
-# MN.WQP.join %>%
-#   group_by(MonitoringLocationIdentifier, Year, DOY)%>%
-#   summarise(n = n()) #53,616 Profiles
+MN.WQP.join %>%
+  group_by(MonitoringLocationIdentifier, Year, DOY)%>%
+  summarise(n = n()) #53,616 Profiles
 # 
 
 #Clean up
@@ -685,7 +685,7 @@ rm(MN.WQP.join, MN_df2, Green.Lake.fromH, GreenLake, GreenLake.DuplicateProfiles
 gc()
 
 
-###### Filtering the Data in Preparation for Interpolation =================
+###### Section 2: Filtering the Data in Preparation for Interpolation =================
 
 #  The goal of this section is to filter the data by several factors:
 #  Lakes must have a profile at the start of stratification (121 <= DOY <= 166)
@@ -1109,7 +1109,7 @@ gc()
 
 
 
-###### Interpolate the Data Frame ===============================================
+###### Section 3: Interpolate the Data Frame ===============================================
 #  In this section linear interpolation is preformed on DO and Temperature 
 #  observations. Then, the interpolation are rejoined to the metadata before
 #  being sent off to calculate AHOD and VHOD
@@ -1352,7 +1352,7 @@ MN.DS.Hypo2 = MN.DS.Hypo.prefilter %>%
 rm(MN.Depth.Specific, Random.sample, MN.presample, MN.DS.Hypo.filter, MN.DS.Hypo.prefilter)
 gc()
 
-###### Calculating AHOD and VHOD ===============================================
+###### Section 4: Calculating AHOD and VHOD ===============================================
 
 #  Here we will first calculate AHOD, 
 #  Then using hyspography data we will calculate VHOD
@@ -1765,7 +1765,7 @@ rm(MN.TOD.animation, MN.states, MN.Filtered.Obs, MN.TOD.plot, MN.Bath,
    MN.Bath.DOW, MN.do.coef, MN.do.tod, MN.DS.Thermo.ag, MN.DS.Thermo, 
    MN.DS.Hypo, MN.DO.LM, OD, ODlm, VW_MN, Bath.Need, DS.MN, MN.AHOD, SOD, WOD)
 
-####### Calculating TDO3 =======================================================
+###### Section 5: Calculating TDO3 ===============================================
 
 #  This section is calculating TDO3 which is the minimum temperature where
 #  the DO is 3 mg/L. 3mg/L is considered to be lethal to cold water fish
