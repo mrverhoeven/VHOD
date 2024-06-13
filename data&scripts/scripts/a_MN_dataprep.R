@@ -22,7 +22,7 @@
 #   1. Work through script deleting extra & deprecated code
 #   2. Rename the input data so that a person can logically track packages of related files. 
 #   3. Remove duplicated profiles (currently just tagged in MNPCA data because of the issue outlined in the remove dups section)
-#   4. Heidi - Figure out the ambiguity of lines 308-336
+#   4. For ambiguous joins, set aside probs and move forward with good stuff
 #   5. Resume checking old work at line 505
  
 
@@ -474,6 +474,8 @@ WQPdata_joined_thinned_wide [!is.na(GR) & !is.na(watertemp_celcius) & !is.na(do_
 #keep only complete records eventually, but for now can just use this is.na() for complete records
 
 # I'm pretty concerned at this point because we have ~87,303 profiles compared to the 53,616 that we had in the old work. That's QUITE a disparity...
+
+# Note from June 2024: That disparity represnts the fact that we have now begun to move our "filtering" out to the end of the process. If you apply sim filters to those 87k, the disparity is not nearly as significant. 
 
 
 
