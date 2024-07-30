@@ -19,12 +19,6 @@
 
 
 # to-do:
-#   1. Work through script deleting extra & deprecated code
-#   2. Rename the input data so that a person can logically track packages of related files. 
-#   3. Remove duplicated profiles (currently just tagged in MNPCA data because of the issue outlined in the remove dups section)
-#   4. For ambiguous joins, set aside probs and move forward with good stuff
-#   5. Resume checking old work at line 505
-# - Remove GR filter from Section 1
 # - nix any code that runs out huge blocks of results
 # - is this code setup to allow a re-pull from WQP?
  
@@ -715,8 +709,8 @@ oldnames = c("DOW", "nhdhr.id", "MonitoringLocationIdentifier", "MonitoringLocat
              "ndep", "AGENCY", "DEPTH_DIF_FLAG", "Latitude", "Longitude", 
              "link_nhd_id", "link_lagosid", "lake_GR", "lake_area_m2", 
              "lake_waterarea_ha", "lake_maxdepth_m")
-newnames = c("dow", "usgs_nhdhr.id", "monitoringlocationidentifier", "monitoringlocationname", 
-               "year", "doy", "profile_ident", "date_clean", "flag_do", "falg_doperc", 
+newnames = c("state_ident", "usgs_nhdhr_id", "monitoringlocationidentifier", "monitoringlocationname", 
+               "year", "doy", "profile_ident", "date", "flag_do", "falg_doperc", 
                "flag_temp", "measurecount_doppm", "measurecount_dopercsat", 
                "measurecount_temp", "depth_m", "temp_c", "do_ppm", "do_perc_sat", 
                "n_dep_inprofile", "agency", "flag_dep_diff", "latitude", "longitude", 
@@ -729,10 +723,19 @@ setnames(MN_profiles,
          new = newnames
          )
   
+MN_profiles[ , "state" := "MN" ,]  
+
+setcolorder(MN_profiles, 
+            neworder = c("state", "state_ident", "usgs_nhdhr_id", "link_nhd_id", "link_lagosid" , "latitude", "longitude",
+                         "year", "doy", "date", "agency",
+                         "monitoringlocationidentifier", "monitoringlocationname", 
+                         "profile_ident", "n_dep_inprofile",
+                         "depth_m", "temp_c", "do_ppm", "do_perc_sat", 
+                         "measurecount_doppm", "measurecount_dopercsat", "measurecount_temp", 
+                         "flag_do", "falg_doperc", "flag_temp", "flag_dep_diff", 
+                         "lake_geomratio", "lake_area_m2", "lake_watershdarea_ha", "lake_maxdepth_m")) # from LAGOS
   
-  
-  
-  
+fwrite(MN_profiles, file = "data&scripts/data/output/MN_profiles.csv") 
   
   
   
