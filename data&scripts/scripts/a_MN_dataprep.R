@@ -5,15 +5,11 @@
 #MGLP Project
 
 #Version History:
-  #Originally written by Jacob Angus 30June2022 (FullMNScript.R)
-  #Modified by Heidi Rantala ~Aug 2023 to examine some questionable DO values and filter rule effects (FullMNScript_hmr_2ppm.R)
-  #Modified by Mike Verhoeven Oct 2023 to separate data aggregation and prep fromfiltering, VHOD and TDO3 generation
+  # Originally written by Jacob Angus 30June2022 (FullMNScript.R)
+  # Modified by Heidi Rantala ~Aug 2023 to examine some questionable DO values and filter rule effects (FullMNScript_hmr_2ppm.R)
+  # Modified by Mike Verhoeven Oct 2023 - Jul 2024 to separate data aggregation and prep from filtering, VHOD and TDO3 generation
 
-#  Script for Minnesota that can be run as a job
-#  It can also be run in individual sections
-#  It has five major sections: Data Cleaning and Joining, Filtering,
-#  Interpolation, Calculating VHOD, Calculating TDO3
-
+# This script will:
 
 # to-do list --------------------------------------------------------------
 
@@ -21,6 +17,7 @@
 # to-do:
 # - nix any code that runs out huge blocks of results
 # - is this code setup to allow a re-pull from WQP?
+# - This code will...
  
 
 # load packages -----------------------------------------------------------
@@ -68,19 +65,19 @@ glimpse(WQP_metadata)
 
 
 # No issues in these two file reads  
-LakeDepthArea <-  fread("lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US (source? also, doubtful...there are only 17675 entries...)
-Link <-  fread("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
+LakeDepthArea <-  fread("lake_depth.csv") #Dataset containing the lake depth and area forlakes in the US (source seems to be LAGOS https://doi.org/10.1002/lob.10482 )
+Link <-  fread("lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset https://aslopubs.onlinelibrary.wiley.com/doi/10.1002/lol2.10203
 
 #  Convert Monitoring Location Identifier into DOW 
 #  DOW is the official way to identify lakes in Minnesota; whereas,
 #  Monitoring Location Identifiers are specific sites on a lake.
 WQP_observations[ OrganizationIdentifier == "MNPCA" , .N , MonitoringLocationIdentifier ]
   
-# FOR MNPCA Records, parse the DOW (Why?)
+# FOR MNPCA Records, parse the DOW
 WQP_observations[ OrganizationIdentifier == "MNPCA" , DOW := gsub("-", "", word(MonitoringLocationIdentifier, start = 2L, end = 4L, sep = "-")) , ]
 #checkwork
-WQP_observations[, unique(DOW) , ]
-WQP_observations[ ,as.numeric(unique(DOW)) ,]
+WQP_observations[, length(unique(DOW)) , ]
+WQP_observations[ ,length(as.numeric(unique(DOW))) ,]
 
 #are any MLI in the obs missing metadata?
 any(is.na(match(WQP_observations[ , unique(MonitoringLocationIdentifier) ,], WQP_metadata[ ,MonitoringLocationIdentifier ,])))
@@ -90,7 +87,7 @@ WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier = MonitoringL
 WQP_observations[ , .N , CharacteristicName]
 #some small amount of duplication is clearly happening in the temps
 
-WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier = MonitoringLocationIdentifier) , ][ , .N , ActivityIdentifier]
+WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier = MonitoringLocationIdentifier) , ][ , .N , ActivityIdentifier][N>1]
 
 
 #duplicated metadata records (each has 2 vals for Horiz accuracy):
@@ -99,9 +96,7 @@ WQP_metadata[MonitoringLocationIdentifier %in% c("USGS-481633096031801","USGS-48
   
 # check for multijoins
 left_join(WQP_observations,WQP_metadata, by = ("MonitoringLocationIdentifier"), relationship = "many-to-one")
-# DONT execute left join
-# WQP_observations <- left_join(WQP_observations,WQP_metadata, by = ("MonitoringLocationIdentifier"), relationship = "many-to-one")
-# jsut grab the location name
+# just grab the location name
 WQP_observations[WQP_metadata, on = .(MonitoringLocationIdentifier = MonitoringLocationIdentifier) , MonitoringLocationName := MonitoringLocationName ]
 
 
@@ -141,7 +136,7 @@ any(word(PCA_profiles$PROFID, 2, sep = "\\." )!="0")#are there any non-zero sig 
 
 PCA_profiles[word(PROFID, 2, sep = fixed(".")) != "0" , PROFID ,] #tons of decimals in here
 PCA_profiles[word(PROFID, 2, sep = fixed(".")) != "0" , .N ,] #122k to be excact
-# about 1/8 of these records have decimals in those profile IDents. This means that the PROFID variable is going to be dup over many measurements in some cases. 
+# about 1/8 of these records have decimals in those profile IDents. This means that the rounded PROFID variable is going to be dup over many measurements in some cases. 
 
 #can we recover something similar in the WQP data? Like a multipart profile identifier? Keep in mind that these were not built, but instead were shipped with the data
 WQP_observations[OrganizationIdentifier=="MNPCA" , MonitoringLocationIdentifier , ]
@@ -154,7 +149,7 @@ PCA_profiles[, .N , AGENCY]
 # Comment -----------------------------------------------------------------
 
 
-#' So it's obvious to me that there are multipart obs in these data (multi row at one location and date), and here we have ignored those as we developed the variables that we will use to cross these two datasets in search of duplicated variables. This means that we won't really check for duplicated measures, but instead duplicated locations/sampling runs (profiles)... This may have NO effect at all, but would result in dumping of PCA data (that's the one that gets cut) where a combo of loc-lake-date matches but has different measurements. This problem warrants a closer look, but moving on for now. Below you'll see that I don't remove those dups, just tag them as such. ONe note here is that the WQP data are a huge mess in the join/merge to lake attributes. So if a person could remove them from the WQP data instead of PCA you might preserve some data. 
+#' So it's obvious to me that there are multipart obs in these data (multi row at one location and date), and here we have ignored those as we developed the variables that we will use to cross these two datasets in search of duplicated variables. This means that we won't really check for duplicated measures, but instead duplicated locations/sampling runs (profiles)... This problem warrants a closer look, but moving on for now. Below you'll see that I don't remove those dups, just tag them as such. ONe note here is that the WQP data are a huge mess in the join/merge to lake attributes. So if a person could remove them from the WQP data instead of PCA you might preserve some data. 
 
 
 # Tag Dups Between WQP & MPCA ------------------------------------
@@ -199,7 +194,7 @@ WQP_observations %>%
 WQP_observations[ , .N , duplicate_prof_PCA ]
 
 
-# # Summarize the MNPCA Data [All of these are matching with the new work]
+# # Summarize the MNPCA Data 
 PCA_profiles %>%
   filter(duplicate_prof_WQP == FALSE ) %>% #434023 obs not tagged duplicated
   group_by(MonitoringLocationIdentifier)%>%
@@ -232,66 +227,7 @@ a <- PCA_profiles[Profile=="MNPCA-01-0001-00-206/2016/180"]
 b <- WQP_observations[Profile=="MNPCA-01-0001-00-206/2016/180"]
 
 
-
-
-# # # #Check for overlap -- here overlap is okay
-# 
-# #DOW overlap
-# WQP_observations[]
-# 
-# #Years overlap
-# WQP.Year = WQP_observations %>%
-#   mutate(Year = year(ymd(ActivityStartDate)))%>%
-#   distinct(Year)
-# PCA.WQP.Year = PCA_profiles %>%
-#   filter(duplicate_prof_WQP == FALSE ) %>% 
-#   mutate(Year = year(mdy(DATE)))%>%
-#   distinct(Year)%>%
-#   inner_join(WQP.Year) #74 Overlap of Years
-# 
-# #Lk Year overlap
-# WQP.LkYear = WQP_observations %>%
-#   mutate(Year = year(ymd(ActivityStartDate)),
-#          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
-#   distinct(Lk_Yr)
-# PCA.WQP.LkYear = PCA_profiles %>%
-#   filter(duplicate_prof_WQP == FALSE ) %>% 
-#   mutate(Year = year(mdy(DATE)),
-#          Lk_Yr = paste(DOW, Year, sep = "/"))%>%
-#   distinct(Lk_Yr)%>%
-#   inner_join(WQP.LkYear)#4,098 Overlap of Lake Year Combos
-# 
-# #MLI Overlap
-# WQP.MLI = WQP_observations %>%
-#   distinct(MonitoringLocationIdentifier)
-# PCA.WQP.MLI = PCA_profiles %>%
-#   filter(duplicate_prof_WQP == FALSE ) %>% 
-#   distinct(MonitoringLocationIdentifier)%>%
-#   inner_join(WQP.MLI) #301 Overlap of MonitoringLocationIdentifier
-# 
-# #profile overlap
-# WQP.Profile.Check = WQP_observations %>%
-#   mutate(Year = year(ymd(ActivityStartDate)),
-#          DOY = yday(ymd(ActivityStartDate)),
-#          Profile = paste(MonitoringLocationIdentifier, Year, DOY, sep = "/"))%>%
-#   distinct(Profile)
-# PCA.WQP.Profile.Check = PCA_profiles %>%
-#   filter(duplicate_prof_WQP == FALSE ) %>% 
-#   mutate(Year = year(mdy(DATE)),
-#          DOY = yday(mdy(DATE)),
-#          Profile = paste(MonitoringLocationIdentifier,Year, DOY, sep = "/"))%>%
-#   distinct(Profile)%>%
-#   inner_join(WQP.Profile.Check)#0 Overlap of Profiles
-# #Clean
-# rm(PCA.WQP.Profile.Check, PCA_WQP.Duplicate.Profiles, PCA.WQP.DOWshared, PCA.WQP.LkYear, PCA.WQP.MLI, PCA.WQP.Year, WQP.MLI, WQP.DOW, WQP.Year, WQP.LkYear, WQP.Profile.Check, WQP_unique_profileIDs)
-# gc()
-
-
-# 
-
 # cleaning WQP data -------------------------------------------------------
-
-
 
 names(PCA_profiles)
 names(WQP_observations)
@@ -503,8 +439,9 @@ glimpse(WQPdata_wide)
 
 MN_profiles <- full_join(WQPdata_wide, PCA_profiles)
 
+lubridate::year(MN_profiles[ , DATE_clean, ])
 
-MN_profiles[ , hist(year(DATE_clean)) ,]
+MN_profiles[ , hist(lubridate::year(DATE_clean)) ,]
 
 
 #  Heidi has some additional data for Green Lake in Kandiyohi County
@@ -678,7 +615,7 @@ MN_profiles[LakeDepthArea, on = .(link_lagosid = lagoslakeid), ':=' ("lake_GR"= 
 
 
 
-# Summaize and Basic QC ---------------------------------------------------
+# Summarize and Basic QC ---------------------------------------------------
 
 
 #summarize that product
@@ -735,17 +672,24 @@ setcolorder(MN_profiles,
                          "flag_do", "falg_doperc", "flag_temp", "flag_dep_diff", 
                          "lake_geomratio", "lake_area_m2", "lake_watershdarea_ha", "lake_maxdepth_m")) # from LAGOS
   
-fwrite(MN_profiles, file = "data&scripts/data/output/MN_profiles.csv") 
+# fwrite(MN_profiles, file = "data&scripts/data/output/MN_profiles.csv") 
   
   
   
-  
-  
-  
-  
-  
-  
-  
+# MN_profiles <- fread("data&scripts/data/output/MN_profiles.csv") 
+#   
+# MN_profiles[str_detect(monitoringlocationname, fixed("vermillion", ignore_case = TRUE))] 
+#   
+#   
+# vermilion_WQ <- MN_profiles[str_detect(monitoringlocationname, fixed("vermilion", ignore_case = TRUE))] 
+# 
+# 
+# vermilion_WQ[ , .N , state_ident ]
+# vermilion_WQ[depth_m <= .1 & 
+#                doy %in% 183:213,
+#              (meanT = median(temp_c, na.rm = T)),
+#              state_ident ]
+#   
   
   
   
