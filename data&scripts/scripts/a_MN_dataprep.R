@@ -18,6 +18,9 @@
 # - nix any code that runs out huge blocks of results
 # - is this code setup to allow a re-pull from WQP?
 # - This code will...
+#  1. organize the data as depth obs as rows (loc, dep, temp, DO)
+
+
  
 
 # load packages -----------------------------------------------------------
@@ -647,7 +650,7 @@ oldnames = c("DOW", "nhdhr.id", "MonitoringLocationIdentifier", "MonitoringLocat
              "link_nhd_id", "link_lagosid", "lake_GR", "lake_area_m2", 
              "lake_waterarea_ha", "lake_maxdepth_m")
 newnames = c("state_ident", "usgs_nhdhr_id", "monitoringlocationidentifier", "monitoringlocationname", 
-               "year", "doy", "profile_ident", "date", "flag_do", "falg_doperc", 
+               "year", "doy", "profile_ident", "date", "flag_do", "flag_doperc", 
                "flag_temp", "measurecount_doppm", "measurecount_dopercsat", 
                "measurecount_temp", "depth_m", "temp_c", "do_ppm", "do_perc_sat", 
                "n_dep_inprofile", "agency", "flag_dep_diff", "latitude", "longitude", 
@@ -669,7 +672,7 @@ setcolorder(MN_profiles,
                          "profile_ident", "n_dep_inprofile",
                          "depth_m", "temp_c", "do_ppm", "do_perc_sat", 
                          "measurecount_doppm", "measurecount_dopercsat", "measurecount_temp", 
-                         "flag_do", "falg_doperc", "flag_temp", "flag_dep_diff", 
+                         "flag_do", "flag_doperc", "flag_temp", "flag_dep_diff", 
                          "lake_geomratio", "lake_area_m2", "lake_watershdarea_ha", "lake_maxdepth_m")) # from LAGOS
   
 # fwrite(MN_profiles, file = "data&scripts/data/output/MN_profiles.csv") 
