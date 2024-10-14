@@ -18,7 +18,7 @@ library("skimr")
 #  geometric ratio, combine data sets with metadata, and join Wisconsin
 #  data sets together. It is split into three sections: WQP , NTL, and DNR
 #  Run time of less than 1 minute
-setwd("C:/Users/herantal/OneDrive - State of Minnesota - MN365/Documents/Coldwater_MGLP2020/Jacob")
+# setwd("C:/Users/herantal/OneDrive - State of Minnesota - MN365/Documents/Coldwater_MGLP2020/Jacob")
 #  Load files
 #  WQP
 allWI.do = read_csv("./Wisconsin.Data/Profiles/WIDataRetrievalCombined.csv") #All WI Observations of Temp and DO from 1940 to 2020
@@ -330,6 +330,25 @@ rm(allWI.do, LakeDepthArea, Link, NTL, NTL.data, NTL.Meta, WI.allsites,
    WI.LakeDepthArea, WI.NTL_Mendota_Crystal_Landscape, WI.NTL.Join,#removed'WI.meta' from this string
    WI.WQP,WI.WQP.join, WINTL, WI.NTL.Meta, WI.DNR, WI.DNR.META)
 gc()
+
+
+
+# export for draft MGLP  --------------------------------------------------
+
+WI.Obs %>% 
+  setDT(WI.Obs) %>% 
+  mutate(state = "WI") %>% 
+  {WI.Obs <<- . }
+
+names(WI.Obs)
+
+
+
+
+
+
+
+
 
 
 

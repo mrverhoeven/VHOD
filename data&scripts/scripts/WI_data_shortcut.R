@@ -1,9 +1,8 @@
-# header ------------------------------------------------------------------
+#MGLP Project
+#Jacob Angus
 
-
-#MGLP Project, Wisconsin
-#Jacob Angus & Mike Verhoeven
-
+#  Script for Wisconsin that can be run as a job
+#  It can also be run in individual sections
 
 library("tidyverse")
 library("lubridate")
@@ -13,29 +12,23 @@ library("rLakeAnalyzer")
 library("readxl")
 library("broom")
 library("skimr")
-library("data.table")
 
 ##### Data Cleaning, Preparation, and Joining ==================================
 #  The goal of this section of the script is to filter lakes for
 #  geometric ratio, combine data sets with metadata, and join Wisconsin
 #  data sets together. It is split into three sections: WQP , NTL, and DNR
 #  Run time of less than 1 minute
-
-#set wd to the data folder to avoid needing filepaths
-# setwd("data&scripts/data/input")
-
-
-
+# setwd("C:/Users/herantal/OneDrive - State of Minnesota - MN365/Documents/Coldwater_MGLP2020/Jacob")
 #  Load files
 #  WQP
-allWI.do = fread("./Wisconsin.Data/Profiles/WIDataRetrievalCombined.csv") #All WI Observations of Temp and DO from 1940 to 2020
-WI.allsites = fread("./Wisconsin.Data/Metadata/WIDataRetrievalMetadata.csv") #Site data for all the observations above
-LakeDepthArea = fread("./Wisconsin.Data/Metadata/lake_depth.csv")  #Dataset containing the lake depth and area forlakes in the US (source seems to be LAGOS https://doi.org/10.1002/lob.10482 )
-Link = fread("./Wisconsin.Data/Metadata/lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset https://aslopubs.onlinelibrary.wiley.com/doi/10.1002/lol2.10203
+allWI.do = read_csv("./Wisconsin.Data/Profiles/WIDataRetrievalCombined.csv") #All WI Observations of Temp and DO from 1940 to 2020
+WI.allsites = read_csv("./Wisconsin.Data/Metadata/WIDataRetrievalMetadata.csv") #Site data for all the observations above
+LakeDepthArea = read_csv("./Wisconsin.Data/Metadata/lake_depth.csv") #Dataset containing the lake depth and area for all lakes in the US
+Link = read_csv("./Wisconsin.Data/Metadata/lake_link.csv") #Dataset that can link the Lagos dataset to the STORET dataset
 
 #  NTL Data
 #  The NTL Data needs a bit of cleaning while loading it in
-WINTL = fread("./Wisconsin.Data/Profiles/WIntl29_v11.csv") %>% #Data from 1984-2021 on the main NTL Lakes
+WINTL = read_csv("./Wisconsin.Data/Profiles/WIntl29_v11.csv") %>% #Data from 1984-2021 on the main NTL Lakes
   mutate(Date = ymd(sampledate),
          Year = year(Date),
          DOY = yday(Date),
@@ -43,7 +36,7 @@ WINTL = fread("./Wisconsin.Data/Profiles/WIntl29_v11.csv") %>% #Data from 1984-2
          Temperature = wtemp,
          DO = o2)%>%
   dplyr::select(lakeid, Date, Year, DOY, Depth, Temperature, DO)
-NTL = fread("./Wisconsin.Data/Profiles/NTLTER_data.csv") %>% #Data from UNDERC from 1984-2016
+NTL = read_csv("./Wisconsin.Data/Profiles/NTLTER_data.csv") %>% #Data from UNDERC from 1984-2016
   mutate(Year = year4,
          DOY = daynum, 
          Date = mdy(sampledate),
@@ -51,7 +44,7 @@ NTL = fread("./Wisconsin.Data/Profiles/NTLTER_data.csv") %>% #Data from UNDERC f
          Temperature = temperature_C,
          DO = dissolvedOxygen)%>%
   dplyr::select(c(lakeid, Year, DOY, Date, Depth, Temperature, DO))
-NTL.Mendota = fread("./Wisconsin.Data/Profiles/mendota_2017_2020.csv") %>% #Data from 2017-2020 for Lake Mendota
+NTL.Mendota = read_csv("./Wisconsin.Data/Profiles/mendota_2017_2020.csv") %>% #Data from 2017-2020 for Lake Mendota
   mutate(Date = mdy(sampledate),
          Year = year(Date),
          DOY = yday(Date),
@@ -59,7 +52,7 @@ NTL.Mendota = fread("./Wisconsin.Data/Profiles/mendota_2017_2020.csv") %>% #Data
          Temperature = wtemp,
          DO = do_raw)%>%
   dplyr::select(c(lakeid, Year, DOY, Date, Depth, Temperature, DO))
-NTL.Crystal = fread("./Wisconsin.Data/Profiles/NTLTER_crystal_2011_2014.csv") %>% #Data from 2011-2014 for Crystal Lake
+NTL.Crystal = read_csv("./Wisconsin.Data/Profiles/NTLTER_crystal_2011_2014.csv") %>% #Data from 2011-2014 for Crystal Lake
   separate(sampledate, into = c("sampledate", "time"), sep = " ") %>%
   mutate(Year = year4,
          DOY = daynum, 
@@ -69,7 +62,7 @@ NTL.Crystal = fread("./Wisconsin.Data/Profiles/NTLTER_crystal_2011_2014.csv") %>
          DO = opt_do2, 
          lakeid = "CR") %>%
   dplyr::select(c(Year, DOY, Date, Depth, Temperature, DO, lakeid))
-NTL.Landscape = fread("./Wisconsin.Data/Profiles/NTLTER_landscape_1998_1999.csv")%>% #Data from 1998-1999 for a landscape survey
+NTL.Landscape = read_csv("./Wisconsin.Data/Profiles/NTLTER_landscape_1998_1999.csv")%>% #Data from 1998-1999 for a landscape survey
   mutate(Date = mdy(sampledate),
          Year = year(Date),
          DOY = yday(Date),
@@ -81,7 +74,7 @@ NTL.Landscape = fread("./Wisconsin.Data/Profiles/NTLTER_landscape_1998_1999.csv"
 NTL.Meta = read_xlsx("./Wisconsin.Data/Metadata/WINTLMetadata.xlsx")%>% #I created a metadata file to link NTL "lakeid" to wibic
   mutate(MonitoringLocationIdentifier = paste("WIDNR_WQX", wibic, sep = "-"))
 WI.meta = readxl:: read_xlsx("./Wisconsin.Data/Metadata/WI.Lakes.xlsx") #WIDNR supplemented lake finder data
-names(WI.meta) = c("WIBIC", "lakename", "surfacearea_ac", 
+names(WI.meta) = c("WIBIC", "lakename", "surfacearea", 
                    "maxdepth", "meandepth", "Latitude", "Longitude", 
                    "PublicLanding", "PublicBeach", "PublicPark", 
                    "Fish", "LakeType", "WaterClarity", "County")
@@ -97,108 +90,48 @@ WI.DNR = read_csv("./Wisconsin.Data/Profiles/WIProfileData.csv")%>% #This only c
   dplyr::select(c(wibic,Date,Depth,Temperature,DO, lakename))
 
 
-
-
-# connect to metadata -----------------------------------------------------
-
-
 #### Filter Metadata
 #  WQP
-# #  To remove lakes that don't stratify (We tag with GR here to allow for filtering in a later step)
-WI.LakeDepthArea = LakeDepthArea %>%
+#  To remove lakes that don't stratify
+WI.LakeDepthArea = LakeDepthArea %>% 
   filter(lake_states == "WI")%>% #We are only looking at WI lakes right now
   mutate(lake_area_m2 = lake_waterarea_ha * 10000,
          Max_Depth = lake_maxdepth_m)%>% #Fang and Stefan 2009 uses the As^0.25:Z with As in square meters
-  mutate(GR = (lake_area_m2^0.25)/Max_Depth)
-
+  mutate(GR = (lake_area_m2^0.25)/Max_Depth)%>%
+  filter(GR < 4) #Lakes with a GR greater than 4 do not stratify
 #  Connect it all together
 WI.WQP = Link %>%
-  dplyr::select(c("lagoslakeid","wqp_monitoringlocationidentifier", lake_namegnis, wqp_monitoringlocationname )) %>% #get rid of extra columns in the data to keep it simpler
+  dplyr::select(c("lagoslakeid","wqp_monitoringlocationidentifier")) %>% #get rid of extra columns in the data to keep it simpler
   inner_join(WI.LakeDepthArea, by = "lagoslakeid") %>% #lagoslakeid also contains all the basins for lakes
   mutate(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) %>% #Making the metadata files share columns
-  filter(!duplicated(.))  #where duplicated rows exist, drop them
-  
-  # A few still misaligned making duplicates
-drop_selector <- WI.WQP[ !is.na(MonitoringLocationIdentifier) &
-          MonitoringLocationIdentifier %in%
-          WI.WQP[ , .N , MonitoringLocationIdentifier ][N>1][,MonitoringLocationIdentifier] ,
-        , ][order(wqp_monitoringlocationname)]
-  #tag for dropping
-  drop_selector[, drop:= c(F,T,#big carr site
-                           F,T,#little crawling stone site
-                           T,F,#little maiden site
-                           T,F,#little Newton Lake site
-                           T,F#lower nemahbin site
-                           )]
- drop_selector
-  WI.WQP <- WI.WQP[!drop_selector[drop==T], on = .(lagoslakeid,MonitoringLocationIdentifier) , ]
-  
-
-  WI.WQP %>% 
   inner_join(WI.allsites, by = "MonitoringLocationIdentifier") %>% #Joining by wqp monitoring location identifier
-  inner_join(allWI.do, by = "MonitoringLocationIdentifier") %>%  #Join to Observation
-    { WI.WQP <<- .}
-  
-  
+  inner_join(allWI.do, by = "MonitoringLocationIdentifier") #Join to Observation
 
 #  Prepare for joining of the Wisconsin Data
 #  Convert from feet to meters
-WI.WQP[ , .N , ActivityDepthHeightMeasure.MeasureUnitCode]
+WI.feet.WQP = WI.WQP %>% 
+  filter(ActivityDepthHeightMeasure.MeasureUnitCode == "feet"|
+           ActivityDepthHeightMeasure.MeasureUnitCode == "ft")%>%
+  mutate(Depth = round(ActivityDepthHeightMeasure.MeasureValue * 0.3038))
+#  Join them together
+WI.meters.WQP = WI.WQP %>%
+  filter(ActivityDepthHeightMeasure.MeasureUnitCode == "m" |
+           ActivityDepthHeightMeasure.MeasureUnitCode == "meters") %>%
+  mutate(Depth = round(ActivityDepthHeightMeasure.MeasureValue))%>%
+  full_join(WI.feet.WQP)%>%
+  dplyr::select(!ActivityDepthHeightMeasure.MeasureUnitCode)
 
-#why so many no values? 
-WI.WQP[is.na(ActivityDepthHeightMeasure.MeasureUnitCode) , .N  , ActivityDepthHeightMeasure.MeasureValue]
-WI.WQP[is.na(ActivityDepthHeightMeasure.MeasureUnitCode) , .N  , .(ActivityDepthHeightMeasure.MeasureValue, CharacteristicName, ActivityMediaSubdivisionName,
-                                                                   ActivityBottomDepthHeightMeasure.MeasureValue, ActivityBottomDepthHeightMeasure.MeasureUnitCode,
-                                                                   ActivityTopDepthHeightMeasure.MeasureValue, ActivityTopDepthHeightMeasure.MeasureUnitCode)]
-#if we don't know the depth of the observation it is not of use to us for most things! 
-
-WI.WQP %>% 
-  # filter(!is.na(ActivityDepthHeightMeasure.MeasureUnitCode)) %>% 
-  mutate(Depth_m_activity = case_when(
-    ActivityDepthHeightMeasure.MeasureUnitCode == "feet" ~ ActivityDepthHeightMeasure.MeasureValue * 0.3038,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "ft" ~ ActivityDepthHeightMeasure.MeasureValue * 0.3038,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "in" ~ ActivityDepthHeightMeasure.MeasureValue * 0.3038/12,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "meters" ~ ActivityDepthHeightMeasure.MeasureValue,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "m" ~ ActivityDepthHeightMeasure.MeasureValue,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "cm" ~ ActivityDepthHeightMeasure.MeasureValue/100,
-    .default = NA
-    )) %>%
-  mutate(Depth_m_result = case_when(
-    ResultDepthHeightMeasure.MeasureUnitCode == "ft" ~ ActivityDepthHeightMeasure.MeasureValue * 0.3038,
-    ResultDepthHeightMeasure.MeasureUnitCode == "in" ~ ActivityDepthHeightMeasure.MeasureValue * 0.3038/12,
-    ResultDepthHeightMeasure.MeasureUnitCode == "meters" ~ ActivityDepthHeightMeasure.MeasureValue,
-    ActivityDepthHeightMeasure.MeasureUnitCode == "cm" ~ ActivityDepthHeightMeasure.MeasureValue/100,
-    .default = NA
-  )) %>%
-  
-  
-  
-  select(!c(ActivityDepthHeightMeasure.MeasureValue,ActivityDepthHeightMeasure.MeasureUnitCode)) %>% #drop the old depth cols
-  {WI.meters.WQP <<- .}
-
-WI.meters.WQP[ , summary(Depth_m) , ]
-  
-WI.meters.WQP[ , .N , CharacteristicName ]
-
-#  Convert more units and fix 
-WI.meters.WQP[ , .N , ResultMeasure.MeasureUnitCode ]
-
-WI.meters.WQP %>% 
-  mutate(Temperature_c = case_when(
-    ResultMeasure.MeasureUnitCode == "deg F" ~ Temperature = (ResultMeasureValue - 32) * 5/9,
-    ResultMeasure.MeasureUnitCode == "deg C" ~ Temperature = ResultMeasureValue),
-    ResultMeasure.MeasureUnitCode == "ug/l" ~ Temperature = (ResultMeasureValue - 32) * 5/9),# kangaroo lake issue
-  ) %>% 
-  mutate(do_ppm = case_when(
-    ResultMeasure.MeasureUnitCode == "deg F" ~ Temperature = (ResultMeasureValue - 32) * 5/9,
-    ResultMeasure.MeasureUnitCode == "deg C" ~ Temperature = ResultMeasureValue),
-  )
-
-
-
-
-
-%>% 
+#  Convert Fahrenheit to Celsius
+WI.fah.WQP = WI.meters.WQP %>% 
+  filter(CharacteristicName == "Temperature, water")%>%
+  filter(ResultMeasure.MeasureUnitCode == "deg F")%>%
+  mutate(Temperature = (ResultMeasureValue - 32) * 5/9)
+#  Join them together and get proper columns
+WI.cel.WQP = WI.meters.WQP %>% 
+  filter(CharacteristicName == "Temperature, water")%>%
+  filter(ResultMeasure.MeasureUnitCode == "deg C")%>%
+  mutate(Temperature = ResultMeasureValue)%>%
+  full_join(WI.fah.WQP) %>%
   mutate(Latitude = lake_lat_decdeg                                    ,
          Longitude = lake_lon_decdeg                                   ,
          Max_Depth = lake_maxdepth_m                                   ,
@@ -245,7 +178,7 @@ WI.NTL.forjoin = WI.meta %>%
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   dplyr::select(c(wibic, Max_Depth))%>%
@@ -259,7 +192,7 @@ NTL.Mendota.Meta = WI.meta %>% #  Join to metadata
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   dplyr::select(c(wibic, Max_Depth))%>%
@@ -287,7 +220,7 @@ NTL.Crystal.Meta = WI.meta %>% #  Join to metadata
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   dplyr::select(c(wibic, Max_Depth))%>%
@@ -316,7 +249,7 @@ NTL.Landscape.Meta = WI.meta %>% #  Join to metadata
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   dplyr::select(c(wibic, Max_Depth))%>%
@@ -361,7 +294,7 @@ WI.DNR.META = WI.meta %>%
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth,
          Latitude = as.double(Latitude),
          Longitude = as.double(Longitude))%>%
@@ -398,6 +331,45 @@ rm(allWI.do, LakeDepthArea, Link, NTL, NTL.data, NTL.Meta, WI.allsites,
    WI.WQP,WI.WQP.join, WINTL, WI.NTL.Meta, WI.DNR, WI.DNR.META)
 gc()
 
+
+
+# export for draft MGLP  --------------------------------------------------
+
+WI.Obs %>% 
+  setDT(WI.Obs) %>% 
+  mutate(state = "WI") %>% 
+  {WI.Obs <<- . }
+
+WI.allsites <- setDT(WI.allsites)
+
+WI.Obs[WI.allsites, on = .(MonitoringLocationIdentifier = MonitoringLocationIdentifier) ,  MonitoringLocationName := MonitoringLocationName  ]
+WI.Obs[ , profile_ident := .GRP   , .(MonitoringLocationIdentifier, wibic, Year, DOY)]
+
+Link <- setDT(Link)
+
+WI.Obs[Link, on = .(MonitoringLocationIdentifier = wqp_monitoringlocationidentifier) , ':=' ("link_nhd_id" = lake_nhdid, "link_lagosid" = lagoslakeid) ]
+  WI.Obs[ , .N  , .( is.na(link_nhd_id)) ] 
+
+  #use mwlaxeref crosswalk to backfill nhdhr IDs from the USGS data team's crosswalks
+  mwlaxeref::wi_to_nhdhr(WI.Obs, "wibic") %>% 
+    {WI.Obs <<- .}
+  WI.Obs[ , .N , .(nhdhr.id, link_nhd_id)]
+  
+  WI.Obs[WI.allsites, on = .(MonitoringLocationIdentifier = MonitoringLocationIdentifier) , ':=' ("latitude" = LatitudeMeasure, "longitude" = LongitudeMeasure, "agency" = agency_cd ) ]
+  
+  setnames(WI.Obs,
+           old = c("wibic", "nhdhr.id", "Year" , "DOY", "Date", "Depth", "Temperature", "DO", "Max_Depth", "MonitoringLocationName", "MonitoringLocationIdentifier"),
+           new = c("state_ident", "usgs_nhdhr_id", "year", "doy", "date", "depth_m", "temp_c",  "do_ppm", "lake_maxdepth_m", "monitoringlocationname", "monitoringlocationidentifier" )) 
+  
+  WI.Obs[ , c("rn", "lakename", "Latitude", "Longitude") := NULL , ]
+  WI.Obs[ , date := as.IDate(date) , ]
+  
+  
+  MN_WI_profiles <- rbindlist(list(MN_profiles, WI.Obs), fill = TRUE, use.names = TRUE)
+  
+
+  fwrite(MN_WI_profiles, file = "data&scripts/data/output/MN_WI_profiles.csv") 
+  
 
 
 ###### Filtering the Data in Preparation for VHOD Calculations =================
@@ -842,7 +814,7 @@ df2 = WI.meta %>%
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   dplyr::select(c(wibic, Max_Depth))%>%
@@ -865,11 +837,11 @@ WI.TOD.META = WI.meta %>% #  Join to metadata
   separate(maxdepth, into = c("Max_Depthft", "Feet"), sep = " ")%>%
   mutate(Max_Depth = as.numeric(Max_Depthft) * 0.3038,#convert feet to meters
          wibic = as.double(WIBIC),
-         waterarea_m2 = 4046.856 * as.numeric(surfacearea_ac),
+         waterarea_m2 = 4046.856 * as.numeric(surfacearea),
          GR = (waterarea_m2^0.25)/Max_Depth)%>%
   filter(GR < 4) %>%
   right_join(WI.do.tod.meta)%>%
-  dplyr::select(!c(surfacearea_ac,Max_Depthft,Feet,meandepth,PublicLanding,
+  dplyr::select(!c(surfacearea,Max_Depthft,Feet,meandepth,PublicLanding,
             PublicBeach, PublicPark,Fish,LakeType,WaterClarity))
 WI.meta %>%
   filter(WIBIC == "2335500")
@@ -888,8 +860,8 @@ df3 = WI.TOD.META %>%
 crystal.bath = read_csv("./Wisconsin.Data/Hypso/crystal_1842400.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "1842400",
-         surfacearea_ac = 376357.6,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 376357.6,
+         areas = proportion_area * surfacearea)
 crystal.bath = as_tibble(na.approx(crystal.bath, x = crystal.bath$Depth, xout = 0:25))
 #  Calculate Alpha value and Depth Specific Volume
 crystal.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -907,8 +879,8 @@ crystal.bath = crystal.bath %>%
 littlecrooked.bath = read_csv("./Wisconsin.Data/Hypso/littlecrooked_2335500.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "2335500",
-         surfacearea_ac = 623215.8,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 623215.8,
+         areas = proportion_area * surfacearea)
 littlecrooked.bath = as_tibble(na.approx(littlecrooked.bath, x = littlecrooked.bath$Depth, xout = 0:9))
 #  Calculate Alpha value and Depth Specific Volume
 littlecrooked.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -926,8 +898,8 @@ littlecrooked.bath = littlecrooked.bath %>%
 llco.bath = read_csv("./Wisconsin.Data/Hypso/littlecourtoreilles_2390500.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "2390500",
-         surfacearea_ac = 894355.2,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 894355.2,
+         areas = proportion_area * surfacearea)
 llco.bath = as_tibble(na.approx(llco.bath, x = llco.bath$Depth, xout = 0:17))
 #  Calculate Alpha value and Depth Specific Volume
 llco.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -945,8 +917,8 @@ llco.bath = llco.bath %>%
 perch.bath = read_csv("./Wisconsin.Data/Hypso/perch_2488300.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "2488300",
-         surfacearea_ac = 182108.5,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 182108.5,
+         areas = proportion_area * surfacearea)
 perch.bath = as_tibble(na.approx(perch.bath, x = perch.bath$Depth, xout = 0:23))
 #  Calculate Alpha value and Depth Specific Volume
 perch.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -964,8 +936,8 @@ perch.bath = perch.bath %>%
 sparkling.bath = read_csv("./Wisconsin.Data/Hypso/sparkling_1881900.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "1881900",
-         surfacearea_ac = 635356.4,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 635356.4,
+         areas = proportion_area * surfacearea)
 sparkling.bath = as_tibble(na.approx(sparkling.bath, x = sparkling.bath$Depth, xout = 0:22))
 #  Calculate Alpha value and Depth Specific Volume
 sparkling.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -983,8 +955,8 @@ sparkling.bath = sparkling.bath %>%
 whitebirch.bath = read_csv("./Wisconsin.Data/Hypso/whitebirch_2340500.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "2340500",
-         surfacearea_ac = 457294.7,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 457294.7,
+         areas = proportion_area * surfacearea)
 whitebirch.bath = as_tibble(na.approx(whitebirch.bath, x = whitebirch.bath$Depth, xout = 0:10))
 #  Calculate Alpha value and Depth Specific Volume
 whitebirch.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
@@ -1002,8 +974,8 @@ whitebirch.bath = whitebirch.bath %>%
 wildcat.bath = read_csv("./Wisconsin.Data/Hypso/wildcat_2336800.csv")%>%
   mutate(Depth = floor(depth_feet * 0.3803),
          wibic = "2336800",
-         surfacearea_ac = 1185729,
-         areas = proportion_area * surfacearea_ac)
+         surfacearea = 1185729,
+         areas = proportion_area * surfacearea)
 wildcat.bath = as_tibble(na.approx(wildcat.bath, x = wildcat.bath$Depth, xout = 0:13))
 #  Calculate Alpha value and Depth Specific Volume
 wildcat.bath$DiffDepth<-0 #fill with dummy values so diff does not bomb
